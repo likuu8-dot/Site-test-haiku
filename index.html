@@ -1,0 +1,584 @@
+<!doctype html>
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>liku Portofoliu</title>
+<meta name="description" content="liku — portofoliu de prezentare, cu scene 3D în Three.js.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,500;1,300;1,500&family=Inter:wght@400;500&display=swap">
+<style>
+  /* Layout: single column, a full-bleed 3D hero, then an asymmetric about grid and a quiet list of work.
+     Palette: obsidian ground, warm off-white text, champagne accent. Single dark look by design. */
+  :root {
+    --bg: #0b0b0c;
+    --bg-raised: #131315;
+    --fg: #efe9dd;
+    --muted: #8f897d;
+    --accent: #c9a96e;
+    --line: rgba(239, 233, 221, 0.12);
+    --font-display: "Cormorant Garamond", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    --font-body: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: 1rem;
+    line-height: 1.7;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    -webkit-font-smoothing: antialiased;
+  }
+
+  img { max-width: 100%; display: block; }
+  a { color: inherit; }
+  :focus-visible { outline: 1px solid var(--accent); outline-offset: 4px; }
+
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+  }
+
+  .label {
+    font-size: 0.72rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    font-weight: 300;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  /* Header */
+  .top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding-block: 1.25rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .brand {
+    font-family: var(--font-display);
+    font-size: 1.6rem;
+    font-style: italic;
+    text-decoration: none;
+    letter-spacing: 0.02em;
+  }
+  .nav {
+    display: flex;
+    gap: 1.4rem;
+  }
+  .nav a {
+    text-decoration: none;
+    font-size: 0.78rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    transition: color 0.3s ease;
+  }
+  .nav a:hover { color: var(--fg); }
+
+  /* Hero: sized by its content, with the 3D scene behind it */
+  .hero {
+    position: relative;
+    overflow: hidden;
+    min-height: 70svh;
+    display: flex;
+    align-items: flex-end;
+    padding-block: 5rem 3.5rem;
+    margin-inline: calc(-1 * max(16px, env(safe-area-inset-left, 0px)));
+    padding-inline: max(16px, env(safe-area-inset-left, 0px));
+  }
+  #scene {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    z-index: 0;
+  }
+  .hero::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, rgba(11,11,12,0.0) 30%, var(--bg) 100%);
+    pointer-events: none;
+    z-index: 1;
+  }
+  .hero-inner {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    max-width: 1080px;
+    margin: 0 auto;
+  }
+  .hero .label { margin-bottom: 1.2rem; animation: rise 1.2s ease both; }
+  .name {
+    font-size: clamp(5.5rem, 30vw, 15rem);
+    line-height: 0.85;
+    font-weight: 300;
+    letter-spacing: -0.02em;
+    margin-left: -0.04em;
+    animation: rise 1.6s 0.15s ease both;
+  }
+  .name em { font-style: italic; color: var(--accent); }
+  .tagline {
+    font-family: var(--font-display);
+    font-size: clamp(1.35rem, 4vw, 2rem);
+    font-style: italic;
+    font-weight: 300;
+    color: var(--fg);
+    margin-top: 1.6rem;
+    max-width: 24ch;
+    animation: rise 1.6s 0.3s ease both;
+  }
+  .cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 2rem;
+    padding: 0.85rem 1.4rem;
+    border: 1px solid var(--accent);
+    color: var(--fg);
+    text-decoration: none;
+    font-size: 0.78rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    transition: background 0.35s ease, color 0.35s ease;
+    animation: rise 1.6s 0.45s ease both;
+  }
+  .cta:hover { background: var(--accent); color: var(--bg); }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  section { padding-block: 5.5rem; }
+  .section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+    flex-wrap: wrap;
+    border-top: 1px solid var(--line);
+    padding-top: 1.2rem;
+    margin-bottom: 3rem;
+  }
+  .section-head h2 { font-size: clamp(2.2rem, 6vw, 3.4rem); }
+
+  /* About */
+  .about {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    gap: 3rem;
+    align-items: center;
+  }
+  .portrait {
+    position: relative;
+    margin: 0;
+    max-width: 420px;
+    width: 100%;
+    aspect-ratio: 4 / 5;
+    overflow: hidden;
+    background: var(--bg-raised);
+  }
+  .portrait img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    filter: grayscale(1) contrast(1.05);
+    transition: transform 1.2s ease;
+  }
+  .portrait:hover img { transform: scale(1.03); }
+  .about-copy p {
+    max-width: 60ch;
+    color: var(--fg);
+    opacity: 0.86;
+    margin: 0 0 1.2rem;
+  }
+  .about-copy h3 {
+    font-size: clamp(1.8rem, 4.5vw, 2.5rem);
+    margin-bottom: 1.2rem;
+  }
+  .skills {
+    list-style: none;
+    padding: 0;
+    margin: 2rem 0 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0;
+  }
+  .skills li {
+    padding: 0.85rem 0;
+    border-top: 1px solid var(--line);
+    font-size: 0.92rem;
+    min-width: 0;
+  }
+  .skills span {
+    display: block;
+    color: var(--muted);
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    margin-bottom: 0.2rem;
+  }
+
+  /* Work */
+  .works {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+    gap: 1.25rem;
+  }
+  .work {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 260px;
+    padding: 1.6rem;
+    background: var(--bg-raised);
+    border: 1px solid var(--line);
+    min-width: 0;
+    transition: border-color 0.4s ease, transform 0.4s ease;
+    text-decoration: none;
+  }
+  .work:hover { border-color: var(--accent); transform: translateY(-4px); }
+  .work-visual {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    max-width: 100%;
+    margin-bottom: 1.4rem;
+    background:
+      radial-gradient(circle at 30% 40%, rgba(201,169,110,0.35), transparent 55%),
+      linear-gradient(135deg, #1b1b1e, #0e0e10);
+    border: 1px solid var(--line);
+  }
+  .work:nth-child(2) .work-visual {
+    background:
+      radial-gradient(circle at 70% 30%, rgba(239,233,221,0.18), transparent 50%),
+      linear-gradient(200deg, #18181b, #0c0c0d);
+  }
+  .work:nth-child(3) .work-visual {
+    background:
+      repeating-linear-gradient(90deg, rgba(201,169,110,0.22) 0 1px, transparent 1px 22px),
+      linear-gradient(160deg, #16161a, #0d0d0f);
+  }
+  .work h3 { font-size: 1.7rem; }
+  .work p { color: var(--muted); margin: 0.5rem 0 0; font-size: 0.92rem; }
+  .work-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 1.2rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  /* Contact */
+  .contact { text-align: left; }
+  .contact h2 {
+    font-size: clamp(3rem, 11vw, 7.5rem);
+    line-height: 0.95;
+    font-style: italic;
+    max-width: 12ch;
+  }
+  .mail {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+    margin-top: 2.5rem;
+  }
+  .mail code {
+    font-family: var(--font-body);
+    font-size: clamp(1rem, 3.5vw, 1.4rem);
+    color: var(--fg);
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
+  .copy {
+    background: none;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    padding: 0.6rem 1rem;
+    font: inherit;
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: color 0.3s ease, border-color 0.3s ease;
+  }
+  .copy:hover { color: var(--fg); border-color: var(--accent); }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding-block: 2rem 2.5rem;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+
+  @media (max-width: 760px) {
+    .about { grid-template-columns: 1fr; gap: 2rem; }
+    .portrait { max-width: 100%; }
+    section { padding-block: 4rem; }
+    .nav { gap: 1rem; }
+    .nav a { font-size: 0.7rem; letter-spacing: 0.12em; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="#top">liku</a>
+    <nav class="nav" aria-label="Principal">
+      <a href="#despre">Despre</a>
+      <a href="#lucrari">Lucrări</a>
+      <a href="#contact">Contact</a>
+    </nav>
+  </header>
+</div>
+
+<main id="top">
+  <div class="wrap">
+    <div class="hero" id="hero">
+      <canvas id="scene" aria-hidden="true"></canvas>
+      <div class="hero-inner">
+        <p class="label">Portofoliu · 2026</p>
+        <h1 class="name">li<em>k</em>u</h1>
+        <p class="tagline">Forme, mișcare și detalii făcute cu grijă.</p>
+        <a class="cta" href="#lucrari">Vezi lucrările &rarr;</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <section id="despre" aria-labelledby="despre-title">
+      <div class="section-head">
+        <h2 id="despre-title">Despre</h2>
+        <span class="label">Cine sunt</span>
+      </div>
+      <div class="about">
+        <figure class="portrait">
+          <img src="assets/liku.jpg" alt="Portretul lui liku" width="1179" height="1516" loading="lazy">
+        </figure>
+        <div class="about-copy">
+          <h3>Construiesc experiențe digitale care se simt bine să fie folosite.</h3>
+          <p>Lucrez la intersecția dintre design și cod. Îmi place să transform idei vagi în interfețe clare, rapide și memorabile, cu atenție la fiecare detaliu, de la tipografie la mișcare.</p>
+          <p>Descrierea aceasta este un text de exemplu. Înlocuiește-l cu povestea ta.</p>
+          <ul class="skills">
+            <li><span>Discipline</span>Design de interfață</li>
+            <li><span>Discipline</span>Dezvoltare web</li>
+            <li><span>Discipline</span>Three.js și 3D</li>
+            <li><span>Discipline</span>Identitate vizuală</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="lucrari" aria-labelledby="lucrari-title">
+      <div class="section-head">
+        <h2 id="lucrari-title">Lucrări</h2>
+        <span class="label">Selecție</span>
+      </div>
+      <div class="works">
+        <a class="work" href="#lucrari">
+          <div>
+            <div class="work-visual" aria-hidden="true"></div>
+            <h3>Proiect cu sticlă</h3>
+            <p>Un site de prezentare pentru un studio de arhitectură, cu scene 3D interactive.</p>
+          </div>
+          <div class="work-meta"><span>Web</span><span>2026</span></div>
+        </a>
+        <a class="work" href="#lucrari">
+          <div>
+            <div class="work-visual" aria-hidden="true"></div>
+            <h3>Aplicație de atelier</h3>
+            <p>Interfață minimalistă pentru programări și gestionarea clienților.</p>
+          </div>
+          <div class="work-meta"><span>Produs</span><span>2025</span></div>
+        </a>
+        <a class="work" href="#lucrari">
+          <div>
+            <div class="work-visual" aria-hidden="true"></div>
+            <h3>Identitate editorială</h3>
+            <p>Sistem vizual, tipografie și ghid de utilizare pentru o revistă independentă.</p>
+          </div>
+          <div class="work-meta"><span>Branding</span><span>2025</span></div>
+        </a>
+      </div>
+    </section>
+
+    <section id="contact" class="contact" aria-labelledby="contact-title">
+      <div class="section-head">
+        <h2 id="contact-title" class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Contact</h2>
+        <span class="label">Contact</span>
+      </div>
+      <h2>Hai să creăm ceva memorabil.</h2>
+      <div class="mail">
+        <code id="email">hello@exemplu.ro</code>
+        <button class="copy" id="copy" type="button">Copiază adresa</button>
+      </div>
+    </section>
+  </div>
+</main>
+
+<div class="wrap">
+  <footer>
+    <span>© 2026 liku</span>
+    <span>Realizat cu Three.js</span>
+  </footer>
+</div>
+
+<script type="importmap">
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+  import * as THREE from "three";
+
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const canvas = document.getElementById("scene");
+  const hero = document.getElementById("hero");
+
+  // Copy button: clipboard works from a click handler; fall back to selecting the text.
+  const copyBtn = document.getElementById("copy");
+  copyBtn.addEventListener("click", async () => {
+    const text = document.getElementById("email").textContent;
+    try {
+      await navigator.clipboard.writeText(text);
+      copyBtn.textContent = "Copiat";
+    } catch (err) {
+      const range = document.createRange();
+      range.selectNodeContents(document.getElementById("email"));
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      copyBtn.textContent = "Selectat";
+    }
+    setTimeout(() => (copyBtn.textContent = "Copiază adresa"), 1800);
+  });
+
+  // 3D scene. If WebGL is unavailable the hero still reads fine without it.
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  } catch (err) {
+    canvas.style.display = "none";
+    renderer = null;
+  }
+
+  if (renderer) {
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x000000, 0);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+    camera.position.set(0, 0, 7.5);
+
+    const gold = 0xc9a96e;
+    const ivory = 0xefe9dd;
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+    const key = new THREE.DirectionalLight(0xfff4e0, 1.4);
+    key.position.set(4, 5, 6);
+    scene.add(key);
+    const rim = new THREE.PointLight(gold, 2.2, 30);
+    rim.position.set(-5, -2, 3);
+    scene.add(rim);
+
+    // Main form: a polished torus knot with a faint wireframe shell.
+    const knotGeo = new THREE.TorusKnotGeometry(1.5, 0.42, 280, 40);
+    const knot = new THREE.Mesh(
+      knotGeo,
+      new THREE.MeshStandardMaterial({ color: gold, metalness: 0.92, roughness: 0.22 })
+    );
+    const shell = new THREE.LineSegments(
+      new THREE.WireframeGeometry(new THREE.TorusKnotGeometry(1.62, 0.42, 90, 14)),
+      new THREE.LineBasicMaterial({ color: ivory, transparent: true, opacity: 0.09 })
+    );
+    const group = new THREE.Group();
+    group.add(knot, shell);
+    group.position.set(1.2, 0.2, 0);
+    scene.add(group);
+
+    // Dust field: a slow drifting cloud of points.
+    const count = 900;
+    const positions = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      const r = 5 + Math.random() * 6;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      positions[i * 3 + 2] = r * Math.cos(phi);
+    }
+    const dustGeo = new THREE.BufferGeometry();
+    dustGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    const dust = new THREE.Points(
+      dustGeo,
+      new THREE.PointsMaterial({ color: ivory, size: 0.02, transparent: true, opacity: 0.55 })
+    );
+    scene.add(dust);
+
+    // Pointer parallax, eased.
+    const pointer = { x: 0, y: 0, tx: 0, ty: 0 };
+    window.addEventListener("pointermove", (e) => {
+      pointer.tx = (e.clientX / window.innerWidth - 0.5) * 2;
+      pointer.ty = (e.clientY / window.innerHeight - 0.5) * 2;
+    });
+
+    function resize() {
+      const w = hero.clientWidth;
+      const h = hero.clientHeight;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      // Keep the form to the right on wide screens and centred on phones.
+      const narrow = w < 640;
+      group.position.x = narrow ? 0 : 1.6;
+      group.position.y = narrow ? 1.2 : 0.2;
+      group.scale.setScalar(narrow ? 0.7 : 1);
+      camera.updateProjectionMatrix();
+    }
+    window.addEventListener("resize", resize);
+    resize();
+
+    const clock = new THREE.Clock();
+    function frame() {
+      const t = clock.getElapsedTime();
+      pointer.x += (pointer.tx - pointer.x) * 0.04;
+      pointer.y += (pointer.ty - pointer.y) * 0.04;
+
+      if (!reduceMotion) {
+        knot.rotation.x = t * 0.12 + pointer.y * 0.25;
+        knot.rotation.y = t * 0.18 + pointer.x * 0.35;
+        shell.rotation.copy(knot.rotation);
+        dust.rotation.y = t * 0.02;
+        dust.rotation.x = pointer.y * 0.05;
+      }
+      renderer.render(scene, camera);
+      if (!reduceMotion) requestAnimationFrame(frame);
+    }
+    // frame() schedules itself while motion is allowed; otherwise it renders one still frame.
+    frame();
+    if (reduceMotion) window.addEventListener("resize", frame);
+  }
+</script>

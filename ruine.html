@@ -679,11 +679,18 @@
   /* ============================================================
      Sunet
      ============================================================ */
+  /* Fiecare sunet are un mic pool de elemente Audio refolosite. Varianta veche crea un element nou
+     (cloneNode) la fiecare lovitură, ceea ce dădea sacadări pe telefoane. */
   const SFX = {};
+  const SFX_POOL = 4;
   ["hit", "kill", "dash", "shoot", "level_up", "coin", "gem", "hurt", "boss", "revive", "downed", "impact", "big_kill", "confirm", "step"].forEach((n) => {
-    const a = new Audio(ASSET + "sfx/" + n + ".ogg");
-    a.preload = "auto";
-    SFX[n] = a;
+    const list = [];
+    for (let k = 0; k < SFX_POOL; k++) {
+      const a = new Audio(ASSET + "sfx/" + n + ".ogg");
+      a.preload = "auto";
+      list.push(a);
+    }
+    SFX[n] = { list, i: 0 };
   });
   const music = new Audio(ASSET + "music/battle_theme_a.mp3");
   music.loop = true;
@@ -695,11 +702,17 @@
     const now = performance.now();
     if (sfxLast[name] && now - sfxLast[name] < 45) return;
     sfxLast[name] = now;
-    const base = SFX[name];
-    if (!base) return;
-    const a = base.cloneNode();
-    a.volume = vol;
-    a.play().catch(() => {});
+    const pool = SFX[name];
+    if (!pool) return;
+    const a = pool.list[pool.i];
+    pool.i = (pool.i + 1) % pool.list.length;
+    try {
+      a.pause();
+      a.currentTime = 0;
+      a.volume = vol;
+      const p = a.play();
+      if (p) p.catch(() => {});
+    } catch (e) { /* audio blocat; jocul continuă fără sunet */ }
   }
   function refreshSoundBtn() {
     $("sndBtn").textContent = "Sunet: " + (soundOn ? "da" : "nu");
@@ -717,9 +730,15 @@
      ============================================================ */
   const canvas = $("gl");
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
-  const PIXEL_RATIO = Math.min(window.devicePixelRatio || 1, 1.5);
-  renderer.setPixelRatio(PIXEL_RATIO);
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  /* Rezoluția de bază e limitată: pe telefoane cu DPR 3 se randau de 2x mai mulți pixeli degeaba.
+     renderScale scade automat când cadrele sunt lente (vezi adaptRenderScale). */
+  const PIXEL_RATIO = Math.min(window.devicePixelRatio || 1, 1.25);
+  let renderScale = 1;
+  function applyRenderScale() {
+    renderer.setPixelRatio(PIXEL_RATIO * renderScale);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+  applyRenderScale();
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.1;
@@ -737,7 +756,7 @@
   const fxCanvas = $("fx");
   const fx = fxCanvas.getContext("2d");
   function sizeFx() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, PIXEL_RATIO);
     fxCanvas.width = Math.round(window.innerWidth * dpr);
     fxCanvas.height = Math.round(window.innerHeight * dpr);
     fx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -965,36 +984,57 @@
     if (canStand(rt.px, nz, r)) rt.pz = nz;
   }
 
+  /* Harta se construiește ca două geometrii unite (podea și pereți), cu doar fețele vizibile:
+     partea de sus a plăcilor și a pereților, plus laturile care dau spre un culoar.
+     Varianta veche desena fiecare placă și perete ca cub complet (6 fețe), inclusiv fețele ascunse,
+     și era cea mai mare parte din timpul de randare. */
   function buildMapMeshes(theme) {
     scene.remove(mapGroup);
-    mapGroup.traverse((o) => { if (o.isInstancedMesh) o.dispose(); });
+    mapGroup.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
     mapGroup = new THREE.Group();
     scene.add(mapGroup);
-    const floorTiles = [], wallTiles = [];
+    const WALL_H = 1.35;
+    const isFloorAt = (i, j) => i >= 0 && j >= 0 && i < TILE_W && j < TILE_H && grid[j * TILE_W + i] === 0;
+    const floor = { p: [], n: [], uv: [], idx: [] };
+    const wall = { p: [], n: [], uv: [], idx: [] };
+    // Patrulater cu colțurile în ordine; ordinea se întoarce singură ca fața să fie spre normala n.
+    const quad = (g, c, n) => {
+      const e1 = [c[1][0] - c[0][0], c[1][1] - c[0][1], c[1][2] - c[0][2]];
+      const e2 = [c[2][0] - c[0][0], c[2][1] - c[0][1], c[2][2] - c[0][2]];
+      const cr = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+      const order = cr[0] * n[0] + cr[1] * n[1] + cr[2] * n[2] >= 0 ? [0, 1, 2, 3] : [0, 3, 2, 1];
+      const base = g.p.length / 3;
+      for (const k of order) { g.p.push(c[k][0], c[k][1], c[k][2]); g.n.push(n[0], n[1], n[2]); }
+      g.uv.push(0, 0, 1, 0, 1, 1, 0, 1);
+      g.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    };
     for (let j = 0; j < TILE_H; j++) for (let i = 0; i < TILE_W; i++) {
-      if (grid[j * TILE_W + i] === 0) floorTiles.push([i, j]);
-      else {
-        let near = false;
-        for (let dj = -1; dj <= 1 && !near; dj++) for (let di = -1; di <= 1 && !near; di++) {
-          const a = i + di, b = j + dj;
-          if (a >= 0 && b >= 0 && a < TILE_W && b < TILE_H && grid[b * TILE_W + a] === 0) near = true;
-        }
-        if (near) wallTiles.push([i, j]);
+      if (isFloorAt(i, j)) {
+        quad(floor, [[i, 0, j], [i, 0, j + 1], [i + 1, 0, j + 1], [i + 1, 0, j]], [0, 1, 0]);
+        continue;
       }
+      let near = false;
+      for (let dj = -1; dj <= 1 && !near; dj++) for (let di = -1; di <= 1 && !near; di++) {
+        if (isFloorAt(i + di, j + dj)) near = true;
+      }
+      if (!near) continue;
+      quad(wall, [[i, WALL_H, j], [i, WALL_H, j + 1], [i + 1, WALL_H, j + 1], [i + 1, WALL_H, j]], [0, 1, 0]);
+      if (isFloorAt(i - 1, j)) quad(wall, [[i, 0, j], [i, 0, j + 1], [i, WALL_H, j + 1], [i, WALL_H, j]], [-1, 0, 0]);
+      if (isFloorAt(i + 1, j)) quad(wall, [[i + 1, 0, j], [i + 1, 0, j + 1], [i + 1, WALL_H, j + 1], [i + 1, WALL_H, j]], [1, 0, 0]);
+      if (isFloorAt(i, j - 1)) quad(wall, [[i, 0, j], [i + 1, 0, j], [i + 1, WALL_H, j], [i, WALL_H, j]], [0, 0, -1]);
+      if (isFloorAt(i, j + 1)) quad(wall, [[i, 0, j + 1], [i + 1, 0, j + 1], [i + 1, WALL_H, j + 1], [i, WALL_H, j + 1]], [0, 0, 1]);
     }
-    const dummy = new THREE.Object3D();
-    const fm = new THREE.InstancedMesh(
-      new THREE.BoxGeometry(1, 0.2, 1),
-      new THREE.MeshStandardMaterial({ map: TEX.surface_plate, color: theme.floor, roughness: 0.95 }),
-      floorTiles.length
-    );
-    floorTiles.forEach(([i, j], n) => { dummy.position.set(i + 0.5, -0.1, j + 0.5); dummy.updateMatrix(); fm.setMatrixAt(n, dummy.matrix); });
-    const wm = new THREE.InstancedMesh(
-      new THREE.BoxGeometry(1, 1.35, 1),
-      new THREE.MeshStandardMaterial({ map: TEX.surface_wall, color: theme.wall, roughness: 0.85 }),
-      wallTiles.length
-    );
-    wallTiles.forEach(([i, j], n) => { dummy.position.set(i + 0.5, 0.675, j + 0.5); dummy.updateMatrix(); wm.setMatrixAt(n, dummy.matrix); });
+    const makeGeo = (g) => {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(g.p, 3));
+      geo.setAttribute("normal", new THREE.Float32BufferAttribute(g.n, 3));
+      geo.setAttribute("uv", new THREE.Float32BufferAttribute(g.uv, 2));
+      geo.setIndex(g.idx);
+      geo.computeBoundingSphere();
+      return geo;
+    };
+    const fm = new THREE.Mesh(makeGeo(floor), new THREE.MeshStandardMaterial({ map: TEX.surface_plate, color: theme.floor, roughness: 0.95 }));
+    const wm = new THREE.Mesh(makeGeo(wall), new THREE.MeshStandardMaterial({ map: TEX.surface_wall, color: theme.wall, roughness: 0.85 }));
     mapGroup.add(fm, wm);
     scene.fog.color.setHex(theme.fog);
     scene.background.setHex(theme.fog);
@@ -1196,7 +1236,7 @@
   function clearDynamic() {
     rt.playerProj.forEach((p) => scene.remove(p.mesh));
     rt.enemyProj.forEach((p) => scene.remove(p.mesh));
-    rt.ground.forEach((g) => scene.remove(g.mesh));
+    rt.ground.forEach(disposeGround);
     rt.playerProj = []; rt.enemyProj = []; rt.ground = []; rt.texts = []; rt.pending = [];
     if (rt.portal) { scene.remove(rt.portal); rt.portal = null; }
   }
@@ -1227,6 +1267,8 @@
     $("mapName").textContent = `Temnița ${rt.mapLevel}: ${theme.name}`;
     msg(`${theme.name} — nivel ${rt.mapLevel}`, 2200);
     updateCamera(true);
+    // Compilează acum shader-ele tuturor materialelor hărții, ca să nu apară sacadă la primul monstru nou.
+    renderer.compile(scene, camera);
     save();
   }
 
@@ -1347,6 +1389,11 @@
     if (m.boss) msg(`${THEMES[state.mapIndex % THEMES.length].bossName} a căzut!`, 2600);
   }
 
+  /* Scoate un obiect de pe sol și eliberează materialele lui (fiecare obiect are materiale proprii). */
+  function disposeGround(g) {
+    scene.remove(g.mesh);
+    g.mesh.traverse((o) => { if (o.material) o.material.dispose(); });
+  }
   function dropItem(x, z, item) {
     const hex = RARITY[item.rarity] ? new THREE.Color(rarityColor(item.rarity)).getHex() : 0xffffff;
     const grp = new THREE.Group();
@@ -2083,7 +2130,7 @@
   }
   window.addEventListener("resize", () => {
     sizeFx();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    applyRenderScale();
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     if (!$("panelTree").hidden) resizeTree();
@@ -2322,6 +2369,20 @@
   /* ============================================================
      Buclă principală
      ============================================================ */
+  /* Scalare dinamică: dacă media cadrelor depășește ~33 fps, randăm la o rezoluție mai mică;
+     când e loc, revenim treptat. Măsurătoarea se face pe ferestre de 1.5 s. */
+  const perfWin = { t: 0, n: 0 };
+  function adaptRenderScale(dt) {
+    perfWin.t += dt; perfWin.n++;
+    if (perfWin.t < 1.5) return;
+    const avg = perfWin.t / perfWin.n;
+    perfWin.t = 0; perfWin.n = 0;
+    let next = renderScale;
+    if (avg > 0.03 && renderScale > 0.5) next = Math.max(0.5, +(renderScale - 0.1).toFixed(2));
+    else if (avg < 0.0165 && renderScale < 1) next = Math.min(1, +(renderScale + 0.05).toFixed(2));
+    if (next !== renderScale) { renderScale = next; applyRenderScale(); }
+  }
+
   let lastHudT = 0;
   let saveT = 0;
   let last = performance.now();
@@ -2401,8 +2462,12 @@
     updateCamera(false);
     rt.shake *= Math.exp(-dt * 7);
     if (rt.shake < 0.005) rt.shake = 0;
-    renderer.render(scene, camera);
-    drawOverlay(dt);
+    // Panourile și ecranul de moarte acoperă complet scena: nu o mai randăm sub ele.
+    if (!uiOpen()) {
+      renderer.render(scene, camera);
+      drawOverlay(dt);
+      adaptRenderScale(dt);
+    }
     if (now - lastHudT > 80) { lastHudT = now; updateHud(); }
     if (!$("panelTree").hidden && Math.floor(now / 400) !== Math.floor((now - 17) / 400)) drawTree();
   }
@@ -2448,7 +2513,7 @@
           msg(`Ai găsit: ${g.item.name}`, 1100);
           sfx("gem", 0.4);
           save();
-          scene.remove(g.mesh);
+          disposeGround(g);
           rt.ground.splice(i, 1);
         } else {
           msg("Rucsacul este plin", 900);

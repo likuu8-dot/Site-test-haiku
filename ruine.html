@@ -243,13 +243,40 @@
   .statbox b { color: var(--text); font-weight: 600; }
   .dead-screen h1 { color: #d05050; }
   .dead-screen .screen-inner { text-align: center; }
-  @media (prefers-reduced-motion: reduce) { .bar i { transition: none; } #msg, #combo { transition: none; } }
+  /* Atmosferă: vignetă statică, puls roșu la viață mică, flash la lovitură, fade între temnițe. */
+  #vignette { position: fixed; inset: 0; z-index: 3; pointer-events: none; background: radial-gradient(ellipse 78% 72% at 50% 46%, transparent 50%, rgba(0,0,0,0.58) 100%); }
+  #vignette::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse 72% 66% at 50% 50%, transparent 42%, rgba(190,8,8,0.6) 100%); opacity: 0; }
+  #vignette.low::after { animation: lowhp 1.1s ease-in-out infinite; }
+  @keyframes lowhp { 0%, 100% { opacity: 0.2; } 50% { opacity: 0.75; } }
+  #hurtFx { position: fixed; inset: 0; z-index: 3; pointer-events: none; opacity: 0; background: radial-gradient(ellipse 70% 65% at 50% 50%, transparent 35%, rgba(230,20,20,0.55) 100%); }
+  #fade { position: fixed; inset: 0; z-index: 30; background: #000; opacity: 0; pointer-events: none; transition: opacity 0.28s ease; display: grid; place-items: center; font-family: var(--display); color: var(--gold); letter-spacing: 0.1em; font-size: 15px; }
+  #fade.on { opacity: 1; }
+
+  /* Bara boss-ului, sus: nume și viață, în stilul ARPG-urilor clasice. */
+  #bossBar { position: absolute; top: calc(max(10px, env(safe-area-inset-top, 0px)) + 66px); left: max(10px, env(safe-area-inset-left, 0px)); right: 118px; text-align: center; pointer-events: none; }
+  #bossBar b { display: block; font-family: var(--display); font-size: 13px; color: #ffb14a; text-shadow: 0 1px 4px #000; letter-spacing: 0.06em; margin-bottom: 3px; }
+  #bossBar b.rage { color: #ff5a3a; }
+  #bossBar .bb { height: 10px; border-radius: 6px; background: rgba(0,0,0,0.7); border: 1px solid rgba(255,140,60,0.55); overflow: hidden; }
+  #bossBar .bb i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #7a1a08, #ff7a2a); transition: width 0.15s linear; }
+  @media (min-width: 760px) { #bossBar { left: 50%; right: auto; width: 420px; transform: translateX(-50%); } }
+
+  /* Minimap rotund cu ceață de război; se mărește la atingere. */
+  #minimap { position: absolute; top: calc(max(10px, env(safe-area-inset-top, 0px)) + 136px); right: max(10px, env(safe-area-inset-right, 0px)); width: 104px; height: 104px; border-radius: 50%; border: 1px solid var(--gold); background: rgba(6,5,9,0.72); box-shadow: 0 4px 14px rgba(0,0,0,0.6); pointer-events: auto; cursor: pointer; }
+  #minimap.big { width: 200px; height: 200px; }
+  .cmp-up { color: #7dff9b; }
+  .cmp-down { color: #ff7b7b; }
+  .cmp-head { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+  @media (prefers-reduced-motion: reduce) { .bar i { transition: none; } #msg, #combo { transition: none; } #vignette.low::after { animation: none; opacity: 0.45; } }
 </style>
 </head>
 <body>
 
 <canvas id="gl"></canvas>
 <canvas id="fx"></canvas>
+<div id="vignette"></div>
+<div id="hurtFx"></div>
+<div id="fade"><span id="fadeTxt"></span></div>
 
 <div id="hud" hidden>
   <div class="hud-top">
@@ -265,6 +292,8 @@
       <button class="btn-ghost" id="sndBtn" type="button">Sunet: da</button>
     </div>
   </div>
+  <div id="bossBar" hidden><b id="bossName"></b><div class="bb"><i id="bossFill"></i></div></div>
+  <canvas id="minimap" aria-label="Hartă: atinge pentru a mări"></canvas>
   <div id="msg" role="status"></div>
   <div id="combo" aria-live="polite"></div>
   <div class="joy" id="joy"><i id="joyKnob"></i></div>
@@ -284,7 +313,7 @@
 <section class="screen" id="startScreen">
   <div class="screen-inner">
     <h1>Ruinele Umbrei</h1>
-    <p class="subtitle">Coboară prin temnițe generate, învinge monștri animați din șase rase, sparge lăzi, adună echipament și construiește-ți arborele de pasive.</p>
+    <p class="subtitle">Coboară prin temnițe luminate de torțe, înfruntă elite cu puteri speciale și boși care se înfurie, adună echipament și construiește-ți arborele de pasive.</p>
     <div class="label">Rasă</div>
     <div class="choices" id="raceChoices" role="radiogroup" aria-label="Rasă"></div>
     <div class="label">Clasă</div>
@@ -297,7 +326,7 @@
       <button type="button" class="secondary" id="btnHelp">Comenzi</button>
     </div>
     <p class="subtitle" id="helpText" hidden style="text-align:left;font-size:13px;margin-top:16px">
-      Pe telefon: glisează pe jumătatea stângă a ecranului pentru a te mișca. 1, 2 și 3 sunt abilități, roșu bea poțiunea, iar albastrul te rostogolește (ești invulnerabil scurt). Abilitățile țintesc automat cel mai apropiat monstru. Pe calculator: WASD sau săgețile, 1-3, R pentru rostogolire și Q pentru poțiune. Lăzile și barilele se sparg; cufărele se deschid atingându-le.
+      Pe telefon: glisează pe jumătatea stângă a ecranului pentru a te mișca. 1, 2 și 3 sunt abilități, roșu bea poțiunea, iar albastrul te rostogolește (ești invulnerabil scurt). Abilitățile țintesc automat cel mai apropiat monstru. Pe calculator: WASD sau săgețile, 1-3, R pentru rostogolire și Q pentru poțiune. Lăzile și barilele se sparg; cufărele se deschid atingându-le. Globurile roșii de pe jos te vindecă. Monștrii cu nume colorat sunt elite: Rapid, Blindat, Vampiric, Exploziv (fugi din cercul roșu când moare) sau Uriaș. Atinge minimap-ul ca să-l mărești.
     </p>
     <p class="subtitle" id="saveNote" style="font-size:12px"></p>
     <p class="subtitle" style="font-size:11px">Modele, animații și sunete: CC0 (Quaternius, Kenney, Screaming Brain Studios). Vezi assets/ruine/CREDITS.txt.</p>
@@ -767,10 +796,11 @@
   scene.background = new THREE.Color(0x07060a);
   scene.fog = new THREE.FogExp2(0x07060a, 0.02);
   const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 200);
-  const ambient = new THREE.HemisphereLight(0xd0d8ff, 0x5a4636, 2.6);
-  const sun = new THREE.DirectionalLight(0xffffff, 2.6);
+  // Lumină de bază mai slabă decât înainte, ca torțele și lumina caldă din jurul eroului să facă contrast.
+  const ambient = new THREE.HemisphereLight(0xd0d8ff, 0x5a4636, 1.55);
+  const sun = new THREE.DirectionalLight(0xffffff, 1.7);
   sun.position.set(12, 28, 10);
-  const torch = new THREE.PointLight(0xffa860, 9, 16, 1.4);
+  const torch = new THREE.PointLight(0xffa860, 16, 14, 1.3);
   scene.add(ambient, sun, torch);
 
   const fxCanvas = $("fx");
@@ -1009,6 +1039,136 @@
     if (canStand(rt.px, nz, r)) rt.pz = nz;
   }
 
+  /* ============================================================
+     Resurse vizuale partajate: umbre-pată, lumini false, torțe, praf.
+     Totul e gândit pentru telefon: fără lumini dinamice noi, fără umbre reale,
+     fără post-procesare. Materialele de aici sunt permanente (userData.keep) și nu se
+     eliberează niciodată, ca shader-ele lor să rămână compilate (vezi effectWarmGroup).
+     ============================================================ */
+  function radialTex(stops, size = 64) {
+    const c = document.createElement("canvas");
+    c.width = c.height = size;
+    const g = c.getContext("2d");
+    const gr = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    for (const [o, col] of stops) gr.addColorStop(o, col);
+    g.fillStyle = gr;
+    g.fillRect(0, 0, size, size);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }
+  const keep = (m) => { m.userData.keep = true; return m; };
+  const TEX_SHADOW = radialTex([[0, "rgba(0,0,0,0.62)"], [0.5, "rgba(0,0,0,0.32)"], [1, "rgba(0,0,0,0)"]]);
+  const TEX_GLOW = radialTex([[0, "rgba(255,255,255,1)"], [0.22, "rgba(255,255,255,0.6)"], [0.55, "rgba(255,255,255,0.18)"], [1, "rgba(255,255,255,0)"]]);
+  const TEX_FLAME = radialTex([[0, "rgba(255,252,225,1)"], [0.28, "rgba(255,196,90,0.95)"], [0.62, "rgba(255,96,24,0.4)"], [1, "rgba(255,40,0,0)"]]);
+
+  // Plan orizontal unitar, folosit de umbre, bălți de lumină și aure.
+  const flatGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  const shadowMat = keep(new THREE.MeshBasicMaterial({ map: TEX_SHADOW, transparent: true, depthWrite: false }));
+  function addBlobShadow(parent, size) {
+    const s = new THREE.Mesh(flatGeo, shadowMat);
+    s.scale.set(size, 1, size);
+    s.position.y = 0.025;
+    s.renderOrder = 1;
+    parent.add(s);
+    return s;
+  }
+  const glowMatCache = new Map();
+  // Material aditiv de strălucire, unul per culoare (lumini false, aure, globuri).
+  function glowMat(hex, opacity = 0.55) {
+    const key = hex + ":" + opacity;
+    if (!glowMatCache.has(key)) glowMatCache.set(key, keep(new THREE.MeshBasicMaterial({ map: TEX_GLOW, color: hex, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false })));
+    return glowMatCache.get(key);
+  }
+  const spriteMatCache = new Map();
+  function glowSpriteMat(hex) {
+    if (!spriteMatCache.has(hex)) spriteMatCache.set(hex, keep(new THREE.SpriteMaterial({ map: TEX_GLOW, color: hex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })));
+    return spriteMatCache.get(hex);
+  }
+  const flameMat = keep(new THREE.SpriteMaterial({ map: TEX_FLAME, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const wallGlowGeo = new THREE.PlaneGeometry(1, 1);
+  const sconceGeo = new THREE.BoxGeometry(0.14, 0.34, 0.14);
+  const sconceMat = keep(new THREE.MeshLambertMaterial({ color: 0x2b1d12 }));
+
+  /* Torțe pe zidul de nord al fiecărei camere (zidul care stă cu fața spre cameră):
+     suport, flacără pâlpâitoare, halou pe zid și baltă de lumină pe podea. */
+  let torchGroup = new THREE.Group();
+  scene.add(torchGroup);
+  const torches = [];
+  function buildTorches() {
+    scene.remove(torchGroup);
+    torchGroup = new THREE.Group();
+    scene.add(torchGroup);
+    torches.length = 0;
+    for (const room of rooms) {
+      const z = room.y;
+      const spots = [room.x + 1.5, room.x + room.w - 1.5];
+      if (room.w >= 10) spots.push(room.x + room.w / 2);
+      for (const sx of spots) {
+        const i = Math.floor(sx);
+        if (isFloor(i + 0.5, z - 0.5) || !isFloor(i + 0.5, z + 0.5)) continue; // e deschiderea unui culoar
+        const x = i + 0.5;
+        const g = new THREE.Group();
+        g.position.set(x, 0, z);
+        const sconce = new THREE.Mesh(sconceGeo, sconceMat);
+        sconce.position.set(0, 0.95, 0.08);
+        const flame = new THREE.Sprite(flameMat);
+        flame.position.set(0, 1.24, 0.16);
+        flame.scale.set(0.42, 0.62, 1);
+        const wallGlow = new THREE.Mesh(wallGlowGeo, glowMat(0xff8a3a, 0.6));
+        wallGlow.position.set(0, 1.05, 0.03);
+        wallGlow.scale.set(2.4, 1.9, 1);
+        const pool = new THREE.Mesh(flatGeo, glowMat(0xff9a48, 0.8));
+        pool.position.set(0, 0.035, 1.35);
+        pool.scale.set(3.8, 1, 3.2);
+        pool.renderOrder = 1;
+        g.add(sconce, flame, wallGlow, pool);
+        torchGroup.add(g);
+        torches.push({ x, z, flame, pool, wallGlow, ph: Math.random() * 10 });
+      }
+    }
+  }
+  function updateTorches(t) {
+    for (const tc of torches) {
+      if (Math.abs(tc.x - rt.px) > 22 || Math.abs(tc.z - rt.pz) > 22) continue;
+      const f = 0.88 + Math.sin(t * 13 + tc.ph) * 0.07 + Math.sin(t * 23.7 + tc.ph * 2.3) * 0.05;
+      tc.flame.scale.set(0.42 * f, 0.62 * (0.85 + f * 0.2), 1);
+      tc.pool.scale.set(3.8 * f, 1, 3.2 * f);
+      tc.wallGlow.scale.set(2.4 * f, 1.9 * f, 1);
+    }
+  }
+
+  /* Praf luminat care plutește în jurul eroului: dă aer și adâncime scenei. Un singur draw call. */
+  const DUST_N = 140;
+  const dustPos = new Float32Array(DUST_N * 3);
+  const dustVel = new Float32Array(DUST_N * 3);
+  for (let i = 0; i < DUST_N; i++) {
+    dustPos[i * 3] = rnd(-13, 13); dustPos[i * 3 + 1] = rnd(0.2, 3.2); dustPos[i * 3 + 2] = rnd(-11, 11);
+    dustVel[i * 3] = rnd(-0.12, 0.12); dustVel[i * 3 + 1] = rnd(-0.05, 0.08); dustVel[i * 3 + 2] = rnd(-0.12, 0.12);
+  }
+  const dustGeo = new THREE.BufferGeometry();
+  dustGeo.setAttribute("position", new THREE.BufferAttribute(dustPos, 3));
+  const dust = new THREE.Points(dustGeo, keep(new THREE.PointsMaterial({ size: 0.07, color: 0xffd9a0, transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending })));
+  dust.frustumCulled = false;
+  scene.add(dust);
+  function updateDust(dt) {
+    // Pozițiile sunt relative la erou; obiectul întreg îl urmează, deci praful nu se termină niciodată.
+    for (let i = 0; i < DUST_N; i++) {
+      const k = i * 3;
+      dustPos[k] += dustVel[k] * dt; dustPos[k + 1] += dustVel[k + 1] * dt; dustPos[k + 2] += dustVel[k + 2] * dt;
+      if (dustPos[k + 1] > 3.4) dustPos[k + 1] = 0.2; else if (dustPos[k + 1] < 0.1) dustPos[k + 1] = 3.2;
+    }
+    dust.position.set(Math.round(rt.px / 26) * 26, 0, Math.round(rt.pz / 22) * 22);
+    // Valorile se repliază în fereastra din jurul eroului.
+    for (let i = 0; i < DUST_N; i++) {
+      const k = i * 3;
+      const wx = dustPos[k] + dust.position.x - rt.px, wz = dustPos[k + 2] + dust.position.z - rt.pz;
+      if (wx > 13) dustPos[k] -= 26; else if (wx < -13) dustPos[k] += 26;
+      if (wz > 11) dustPos[k + 2] -= 22; else if (wz < -11) dustPos[k + 2] += 22;
+    }
+    dustGeo.attributes.position.needsUpdate = true;
+  }
+
   /* Harta se construiește ca două geometrii unite (podea și pereți), cu doar fețele vizibile:
      partea de sus a plăcilor și a pereților, plus laturile care dau spre un culoar.
      Varianta veche desena fiecare placă și perete ca cub complet (6 fețe), inclusiv fețele ascunse,
@@ -1020,22 +1180,40 @@
     scene.add(mapGroup);
     const WALL_H = 1.35;
     const isFloorAt = (i, j) => i >= 0 && j >= 0 && i < TILE_W && j < TILE_H && grid[j * TILE_W + i] === 0;
-    const floor = { p: [], n: [], uv: [], idx: [] };
-    const wall = { p: [], n: [], uv: [], idx: [] };
+    const floor = { p: [], n: [], uv: [], idx: [], col: [] };
+    const wall = { p: [], n: [], uv: [], idx: [], col: [] };
     // Patrulater cu colțurile în ordine; ordinea se întoarce singură ca fața să fie spre normala n.
-    const quad = (g, c, n) => {
+    // cols: luminozitatea fiecărui colț (ocluzie ambientală pictată în vârfuri, fără cost la randare).
+    const quad = (g, c, n, cols) => {
       const e1 = [c[1][0] - c[0][0], c[1][1] - c[0][1], c[1][2] - c[0][2]];
       const e2 = [c[2][0] - c[0][0], c[2][1] - c[0][1], c[2][2] - c[0][2]];
       const cr = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
       const order = cr[0] * n[0] + cr[1] * n[1] + cr[2] * n[2] >= 0 ? [0, 1, 2, 3] : [0, 3, 2, 1];
       const base = g.p.length / 3;
-      for (const k of order) { g.p.push(c[k][0], c[k][1], c[k][2]); g.n.push(n[0], n[1], n[2]); }
+      for (const k of order) {
+        g.p.push(c[k][0], c[k][1], c[k][2]);
+        g.n.push(n[0], n[1], n[2]);
+        const v = cols[k];
+        g.col.push(v, v * 0.97, v * 0.93);
+      }
       g.uv.push(0, 0, 1, 0, 1, 1, 0, 1);
       g.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
     };
+    const hash = (i, j) => { const s = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return s - Math.floor(s); };
+    // Colțul (cx, cz) e mai întunecat cu cât sunt mai mulți pereți în cele 4 plăci din jurul lui.
+    const ao = (cx, cz) => {
+      let w = 0;
+      if (!isFloorAt(cx - 1, cz - 1)) w++;
+      if (!isFloorAt(cx, cz - 1)) w++;
+      if (!isFloorAt(cx - 1, cz)) w++;
+      if (!isFloorAt(cx, cz)) w++;
+      return 1 - 0.2 * w;
+    };
     for (let j = 0; j < TILE_H; j++) for (let i = 0; i < TILE_W; i++) {
       if (isFloorAt(i, j)) {
-        quad(floor, [[i, 0, j], [i, 0, j + 1], [i + 1, 0, j + 1], [i + 1, 0, j]], [0, 1, 0]);
+        const v = 0.86 + hash(i, j) * 0.2;
+        quad(floor, [[i, 0, j], [i, 0, j + 1], [i + 1, 0, j + 1], [i + 1, 0, j]], [0, 1, 0],
+          [ao(i, j) * v, ao(i, j + 1) * v, ao(i + 1, j + 1) * v, ao(i + 1, j) * v]);
         continue;
       }
       let near = false;
@@ -1043,24 +1221,28 @@
         if (isFloorAt(i + di, j + dj)) near = true;
       }
       if (!near) continue;
-      quad(wall, [[i, WALL_H, j], [i, WALL_H, j + 1], [i + 1, WALL_H, j + 1], [i + 1, WALL_H, j]], [0, 1, 0]);
-      if (isFloorAt(i - 1, j)) quad(wall, [[i, 0, j], [i, 0, j + 1], [i, WALL_H, j + 1], [i, WALL_H, j]], [-1, 0, 0]);
-      if (isFloorAt(i + 1, j)) quad(wall, [[i + 1, 0, j], [i + 1, 0, j + 1], [i + 1, WALL_H, j + 1], [i + 1, WALL_H, j]], [1, 0, 0]);
-      if (isFloorAt(i, j - 1)) quad(wall, [[i, 0, j], [i + 1, 0, j], [i + 1, WALL_H, j], [i, WALL_H, j]], [0, 0, -1]);
-      if (isFloorAt(i, j + 1)) quad(wall, [[i, 0, j + 1], [i + 1, 0, j + 1], [i + 1, WALL_H, j + 1], [i, WALL_H, j + 1]], [0, 0, 1]);
+      const top = 0.72 + hash(i, j) * 0.12;
+      quad(wall, [[i, WALL_H, j], [i, WALL_H, j + 1], [i + 1, WALL_H, j + 1], [i + 1, WALL_H, j]], [0, 1, 0], [top, top, top, top]);
+      // Laturile: baza întunecată, partea de sus luminată, ca zidul să pară înalt și așezat pe podea.
+      const lo = 0.34, hi = 0.95 + hash(j, i) * 0.1;
+      if (isFloorAt(i - 1, j)) quad(wall, [[i, 0, j], [i, 0, j + 1], [i, WALL_H, j + 1], [i, WALL_H, j]], [-1, 0, 0], [lo, lo, hi, hi]);
+      if (isFloorAt(i + 1, j)) quad(wall, [[i + 1, 0, j], [i + 1, 0, j + 1], [i + 1, WALL_H, j + 1], [i + 1, WALL_H, j]], [1, 0, 0], [lo, lo, hi, hi]);
+      if (isFloorAt(i, j - 1)) quad(wall, [[i, 0, j], [i + 1, 0, j], [i + 1, WALL_H, j], [i, WALL_H, j]], [0, 0, -1], [lo, lo, hi, hi]);
+      if (isFloorAt(i, j + 1)) quad(wall, [[i, 0, j + 1], [i + 1, 0, j + 1], [i + 1, WALL_H, j + 1], [i, WALL_H, j + 1]], [0, 0, 1], [lo, lo, hi, hi]);
     }
     const makeGeo = (g) => {
       const geo = new THREE.BufferGeometry();
       geo.setAttribute("position", new THREE.Float32BufferAttribute(g.p, 3));
       geo.setAttribute("normal", new THREE.Float32BufferAttribute(g.n, 3));
       geo.setAttribute("uv", new THREE.Float32BufferAttribute(g.uv, 2));
+      geo.setAttribute("color", new THREE.Float32BufferAttribute(g.col, 3));
       geo.setIndex(g.idx);
       geo.computeBoundingSphere();
       return geo;
     };
     // Lambert în loc de Standard: podeaua și pereții acoperă aproape tot ecranul, iar umbrirea PBR costa mult pe telefon.
-    const fm = new THREE.Mesh(makeGeo(floor), new THREE.MeshLambertMaterial({ map: TEX.surface_plate, color: theme.floor }));
-    const wm = new THREE.Mesh(makeGeo(wall), new THREE.MeshLambertMaterial({ map: TEX.surface_wall, color: theme.wall }));
+    const fm = new THREE.Mesh(makeGeo(floor), new THREE.MeshLambertMaterial({ map: TEX.surface_plate, color: theme.floor, vertexColors: true }));
+    const wm = new THREE.Mesh(makeGeo(wall), new THREE.MeshLambertMaterial({ map: TEX.surface_wall, color: theme.wall, vertexColors: true }));
     mapGroup.add(fm, wm);
     scene.fog.color.setHex(theme.fog);
     scene.background.setHex(theme.fog);
@@ -1076,6 +1258,7 @@
     ent.root.position.set(x, 0, z);
     ent.root.rotation.y = Math.random() * Math.PI * 2;
     scene.add(ent.root);
+    addBlobShadow(ent.root, def.R * 2.6);
     // Decorul stă pe loc: matricele se calculează o dată, nu în fiecare cadru. Se reactivează când obiectul se sparge.
     ent.root.updateMatrixWorld(true);
     ent.root.matrixWorldAutoUpdate = false;
@@ -1186,8 +1369,11 @@
     if (leveled) {
       const oldMax = rt.maxLife;
       recalc();
-      rt.life = Math.min(rt.maxLife, rt.life + (rt.maxLife - oldMax));
-      msg(`Nivelul ${state.level}! Ai un punct de pasiv.`, 2200);
+      void oldMax;
+      // Ca în ARPG-urile clasice: nivelul nou umple viața și mana.
+      rt.life = rt.maxLife;
+      rt.mana = rt.maxMana;
+      msg(`Nivelul ${state.level}! Viață plină și un punct de pasiv.`, 2200);
       sfx("level_up", 0.6);
       burst(rt.px, 1, rt.pz, 0xffd34d, 26);
       addRingEffect(rt.px, rt.pz, 2.6, 0xffd34d, 0.6);
@@ -1202,12 +1388,25 @@
   /* ============================================================
      Monștri
      ============================================================ */
-  function spawnMonster(key, x, z, boss = false) {
+  /* Afixe de elită: monștri mai puternici, cu aură colorată, nume propriu și pradă garantată. */
+  const ELITE_AFFIX = [
+    { id: "rapid", name: "Rapid", color: 0x5ae6ff, desc: "se mișcă și lovește mai repede" },
+    { id: "armored", name: "Blindat", color: 0xd8d8f0, desc: "primește cu 40% mai puțină daună" },
+    { id: "vampiric", name: "Vampiric", color: 0xff2f55, desc: "se vindecă din loviturile lui" },
+    { id: "explosive", name: "Exploziv", color: 0xff9a20, desc: "explodează când moare" },
+    { id: "giant", name: "Uriaș", color: 0xb070ff, desc: "uriaș, cu mult mai multă viață" }
+  ];
+  const hexCss = (h) => "#" + h.toString(16).padStart(6, "0");
+
+  function spawnMonster(key, x, z, boss = false, elite = null) {
     const R = RACES_MON[key];
     const lvl = rt.mapLevel;
-    const hpMax = Math.round(R.hp * (1 + 0.12 * (lvl - 1)) * (boss ? 8 : 1));
-    const ent = instantiate(R.model, R.tint ?? null);
-    const scaleK = R.size * (boss ? 1.7 : 1);
+    const aff = elite ? ELITE_AFFIX.find((a) => a.id === elite) : null;
+    let hpMul = boss ? 8 : 1, sizeMul = boss ? 1.7 : 1;
+    if (aff) { hpMul = aff.id === "giant" ? 4.2 : 2.6; sizeMul = aff.id === "giant" ? 1.45 : 1.18; }
+    const hpMax = Math.round(R.hp * (1 + 0.12 * (lvl - 1)) * hpMul);
+    const ent = aff ? instantiate(R.model, aff.color, 0.09) : instantiate(R.model, R.tint ?? null);
+    const scaleK = R.size * sizeMul;
     const Mdl = MODELS[R.model];
     ent.body.scale.setScalar(Mdl.s * scaleK);
     ent.body.position.y = -Mdl.minY * Mdl.s * scaleK;
@@ -1215,15 +1414,26 @@
     scene.add(ent.root);
     const m = {
       key, R, boss, x, z, hp: hpMax, maxHp: hpMax,
-      dmg: R.dmg * (1 + 0.08 * (lvl - 1)) * (boss ? 1.6 : 1),
-      speed: R.speed * (boss ? 0.85 : 1),
-      r: 0.42 * R.size * (boss ? 1.7 : 1),
+      dmg: R.dmg * (1 + 0.08 * (lvl - 1)) * (boss ? 1.6 : 1) * (aff ? 1.35 : 1),
+      speed: R.speed * (boss ? 0.85 : 1) * (aff && aff.id === "rapid" ? 1.45 : aff && aff.id === "giant" ? 0.85 : 1),
+      r: 0.42 * R.size * sizeMul,
+      elite: aff, cdMul: aff && aff.id === "rapid" ? 0.7 : 1, name: aff ? `${aff.name} ${R.name}` : R.name,
       h: MODEL_DEF[R.model] ? MODEL_DEF[R.model].h * scaleK : 1.5,
       alive: true, aggro: boss, cd: rnd(0, 0.8), slowT: 0, stunT: 0,
       pounceT: 0, pounceDur: 0, pdx: 0, pdz: 0, slamT: 3.5, slamWarn: false,
       windup: 0, windupKind: null, reviveTimer: 0, revived: false, hurtT: 0, corpseT: 0, knockX: 0, knockZ: 0,
       ent
     };
+    addBlobShadow(ent.root, m.r * 3.4);
+    // Aură pe podea: culoarea afixului la elite, roșu la boss.
+    if (aff || boss) {
+      const aura = new THREE.Mesh(flatGeo, glowMat(aff ? aff.color : 0xff3020, 0.75));
+      aura.scale.set(m.r * 5.5, 1, m.r * 5.5);
+      aura.position.y = 0.045;
+      aura.renderOrder = 2;
+      ent.root.add(aura);
+      m.aura = aura;
+    }
     rt.monsters.push(m);
     playAct(ent, R.anims.idle);
     return m;
@@ -1251,11 +1461,13 @@
         return;
       }
       const n = rint(2, 3 + Math.floor(rt.mapLevel / 3));
+      // O cameră din ~3 are o elită; șansa crește cu nivelul temniței.
+      let eliteLeft = Math.random() < Math.min(0.55, 0.3 + 0.03 * rt.mapLevel) ? 1 : 0;
       for (let k = 0; k < n; k++) {
         const x = rnd(room.x + 1, room.x + room.w - 1), z = rnd(room.z ?? room.y + 1, room.y + room.h - 1);
         if (!canStand(x, z, 0.5)) continue;
         if (Math.hypot(x - cx, z - cz) < 0.5 && Math.random() < 0.5) continue;
-        spawnMonster(pick(theme.pool), x, z);
+        spawnMonster(pick(theme.pool), x, z, false, eliteLeft-- > 0 ? pick(ELITE_AFFIX).id : null);
       }
     });
   }
@@ -1282,7 +1494,11 @@
     rt.bossRoom = rooms[bossIdx];
     rt.face = { x: 0, z: 1 };
     spawnProps();
+    buildTorches();
     populateMap();
+    resetMinimap();
+    rt.bossSeen = false;
+    $("bossBar").hidden = true;
     rt.kills = 0;
     rt.cd = {};
     rt.basicCd = 0;
@@ -1304,12 +1520,41 @@
     save();
   }
 
+  /* Trecerea prin portal: ecranul se întunecă, temnița nouă se construiește în spatele lui (inclusiv
+     compilarea shader-elor), apoi imaginea revine. Așa nu se vede nicio sacadă de încărcare. */
   function nextMap() {
-    state.mapIndex++;
-    state.potions = Math.min(8, state.potions + 1);
-    msg("Ai intrat în portalul următor. +1 poțiune.", 2000);
+    if (rt.transition) return;
+    rt.transition = true;
     sfx("confirm", 0.6);
-    startMap(true);
+    const theme = THEMES[(state.mapIndex + 1) % THEMES.length];
+    $("fadeTxt").textContent = `Temnița ${state.mapIndex + 2}: ${theme.name}`;
+    $("fade").classList.add("on");
+    setTimeout(() => {
+      state.mapIndex++;
+      state.potions = Math.min(8, state.potions + 1);
+      startMap(true);
+      msg("+1 poțiune pentru drum.", 1800);
+      setTimeout(() => { $("fade").classList.remove("on"); rt.transition = false; }, 120);
+    }, 320);
+  }
+
+  /* La jumătate de viață, boss-ul se înfurie: mai rapid, lovituri mai dese și doi ajutoare. */
+  function enrageBoss(m) {
+    m.enraged = true;
+    m.speed *= 1.3;
+    m.cdMul = 0.7;
+    const theme = THEMES[state.mapIndex % THEMES.length];
+    msg(`${theme.bossName} se înfurie!`, 2000);
+    sfx("boss", 0.7);
+    rt.shake = Math.min(0.8, rt.shake + 0.4);
+    addRingEffect(m.x, m.z, 4, 0xff3020, 0.7);
+    burst(m.x, 1, m.z, 0xff3020, 26);
+    if (m.aura) m.aura.material = glowMat(0xff1a00, 0.95);
+    for (let k = 0; k < 2; k++) {
+      const a = Math.random() * Math.PI * 2;
+      const x = m.x + Math.cos(a) * 2.2, z = m.z + Math.sin(a) * 2.2;
+      if (canStand(x, z, 0.5)) { const add = spawnMonster(pick(theme.pool), x, z); add.aggro = true; burst(x, 0.6, z, 0x9a6aff, 14); }
+    }
   }
 
   /* ============================================================
@@ -1330,6 +1575,8 @@
     d = Math.max(1, Math.round(d));
     rt.life -= d;
     rt.hurtFlash = 0.25;
+    const hf = $("hurtFx");
+    if (hf.animate) hf.animate([{ opacity: Math.min(1, 0.35 + d / rt.maxLife * 3) }, { opacity: 0 }], { duration: 320, easing: "ease-out" });
     rt.shake = Math.min(0.7, rt.shake + 0.25);
     addText(rt.px, 1.9, rt.pz, "-" + d, "#ff6b6b", 1.1);
     burst(rt.px, 1, rt.pz, 0xff3030, 10);
@@ -1368,8 +1615,10 @@
     if (!m.alive) return;
     let d = base;
     if (m.R.resist && m.R.resist[elem]) d *= 1 - m.R.resist[elem];
+    if (m.elite && m.elite.id === "armored") d *= 0.6;
     d = Math.max(1, Math.round(d));
     m.hp -= d;
+    if (m.boss && !m.enraged && m.hp > 0 && m.hp < m.maxHp * 0.5) enrageBoss(m);
     m.hurtT = 2.5;
     if (slow) m.slowT = Math.max(m.slowT, slow);
     if (stun) m.stunT = Math.max(m.stunT, stun);
@@ -1399,11 +1648,19 @@
     sfx(m.boss ? "big_kill" : "kill", m.boss ? 0.8 : 0.5);
     if (m.boss) rt.hitStop = Math.max(rt.hitStop, 0.12);
     if (m.boss) rt.shake = Math.min(0.8, rt.shake + 0.5);
-    if (m.R.explode) {
-      addRingEffect(m.x, m.z, m.R.explode.radius, 0xffb020, 0.4);
-      sfx("impact", 0.6);
-      const d = Math.hypot(rt.px - m.x, rt.pz - m.z);
-      if (d < m.R.explode.radius) hurtPlayer(m.R.explode.dmg * (1 + 0.08 * (rt.mapLevel - 1)), "fire");
+    if (m.aura) m.aura.visible = false;
+    // Explozia are un avertisment de 0.65 s (cerc roșu): se poate evita cu rostogolirea.
+    const ex = m.R.explode || (m.elite && m.elite.id === "explosive" ? { dmg: 16, radius: 2.8 } : null);
+    if (ex) {
+      const ex0 = m.x, ez0 = m.z;
+      addRingEffect(ex0, ez0, ex.radius, 0xff3020, 0.65);
+      rt.pending.push({ t: 0.65, fn: () => {
+        addRingEffect(ex0, ez0, ex.radius, 0xffb020, 0.4);
+        burst(ex0, 0.6, ez0, 0xffa030, 22);
+        sfx("impact", 0.6);
+        rt.shake = Math.min(0.6, rt.shake + 0.25);
+        if (Math.hypot(rt.px - ex0, rt.pz - ez0) < ex.radius) hurtPlayer(ex.dmg * (1 + 0.08 * (rt.mapLevel - 1)), "fire");
+      } });
     }
     m.ent.dead = true;
     if (m.R.revive && !m.revived) {
@@ -1413,25 +1670,49 @@
       playAct(m.ent, m.R.anims.death, { once: true, dur: 1.0 });
       m.corpseT = 2.2;
     }
-    gainXp(m.R.xp * (m.boss ? 6 : 1) * (1 + 0.05 * (rt.mapLevel - 1)));
-    if (m.boss || Math.random() < 0.32) {
-      const ilvl = rt.mapLevel + (m.boss ? 2 : 0);
-      const rarity = m.boss ? (Math.random() < 0.5 ? "rare" : "magic") : undefined;
+    gainXp(m.R.xp * (m.boss ? 6 : m.elite ? 3 : 1) * (1 + 0.05 * (rt.mapLevel - 1)));
+    if (m.boss || m.elite || Math.random() < 0.32) {
+      const ilvl = rt.mapLevel + (m.boss ? 2 : m.elite ? 1 : 0);
+      const rarity = m.boss || m.elite ? (Math.random() < 0.5 ? "rare" : "magic") : undefined;
       dropItem(m.x, m.z, makeItem(ilvl, rarity));
+      if ((m.boss || m.elite) && Math.random() < 0.45) dropItem(m.x + 0.5, m.z - 0.3, makeItem(ilvl));
     }
+    // Globuri de viață: sigur la elite și boss, uneori la monștrii obișnuiți.
+    if (m.boss) { dropGlobe(m.x - 0.6, m.z + 0.4); dropGlobe(m.x + 0.6, m.z + 0.4); }
+    else if (m.elite || Math.random() < 0.16) dropGlobe(m.x + rnd(-0.4, 0.4), m.z + rnd(-0.4, 0.4));
     if (m.boss) msg(`${THEMES[state.mapIndex % THEMES.length].bossName} a căzut!`, 2600);
   }
 
   /* Scoate un obiect de pe sol și eliberează materialele lui (fiecare obiect are materiale proprii). */
   function disposeGround(g) {
     scene.remove(g.mesh);
-    g.mesh.traverse((o) => { if (o.material) o.material.dispose(); });
+    g.mesh.traverse((o) => { if (o.material && !o.material.userData.keep) o.material.dispose(); });
+  }
+  /* Glob de viață: se ia automat când treci prin el, nu ocupă loc în rucsac. */
+  const globeGeo = new THREE.SphereGeometry(0.2, 12, 8);
+  const globeMat = keep(new THREE.MeshBasicMaterial({ color: 0xff3348 }));
+  function dropGlobe(x, z) {
+    if (!isFloor(x, z)) { x = rt.px; z = rt.pz; }
+    const grp = new THREE.Group();
+    const core = new THREE.Mesh(globeGeo, globeMat);
+    core.position.y = 0.5;
+    const halo = new THREE.Sprite(glowSpriteMat(0xff2244));
+    halo.scale.setScalar(1.15);
+    core.add(halo);
+    grp.add(core);
+    grp.position.set(x, 0, z);
+    scene.add(grp);
+    rt.ground.push({ x, z, globe: true, mesh: grp, gem: core, t: Math.random() * 6 });
   }
   function dropItem(x, z, item) {
     const hex = RARITY[item.rarity] ? new THREE.Color(rarityColor(item.rarity)).getHex() : 0xffffff;
     const grp = new THREE.Group();
     const gem = new THREE.Mesh(groundGeo, new THREE.MeshBasicMaterial({ color: hex }));
     gem.position.y = 0.5;
+    // Halou în culoarea rarității, ca prada să se vadă de departe.
+    const halo = new THREE.Sprite(glowSpriteMat(hex));
+    halo.scale.setScalar(item.rarity === "normal" ? 0.7 : 1.25);
+    gem.add(halo);
     const beamMat = new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: item.rarity === "normal" ? 0.12 : 0.35, depthWrite: false });
     const beam = new THREE.Mesh(beamGeo, beamMat);
     beam.position.y = 1.6;
@@ -1503,6 +1784,9 @@
   function spawnPlayerProj(sk, dx, dz, dmgRaw, elem) {
     const r = rollHit(dmgRaw);
     const mesh = new THREE.Mesh(projGeo, basicMat(sk.color));
+    const glow = new THREE.Sprite(glowSpriteMat(sk.color));
+    glow.scale.setScalar(sk.aoe ? 1.6 : 0.95);
+    mesh.add(glow);
     const sx = rt.px + dx * 0.7, sz = rt.pz + dz * 0.7;
     mesh.position.set(sx, 1.0, sz);
     mesh.scale.setScalar(sk.aoe ? 1.3 : 1);
@@ -1536,7 +1820,12 @@
       new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.3, depthWrite: false })),
       new THREE.Mesh(groundGeo, new THREE.MeshBasicMaterial({ color: 0xffffff })),
       new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ transparent: true, opacity: 1 })),
-      new THREE.Mesh(projGeo, basicMat(0xffffff))
+      new THREE.Mesh(projGeo, basicMat(0xffffff)),
+      new THREE.Mesh(flatGeo, glowMat(0xffffff, 0.5)),
+      new THREE.Mesh(flatGeo, shadowMat),
+      new THREE.Mesh(sconceGeo, sconceMat),
+      new THREE.Sprite(glowSpriteMat(0xffffff)),
+      new THREE.Sprite(flameMat)
     );
     return effectWarm;
   }
@@ -1773,6 +2062,9 @@
   function fireEnemyProjectile(m, tx, tz) {
     const dx = tx - m.x, dz = tz - m.z, L = Math.hypot(dx, dz) || 1;
     const mesh = new THREE.Mesh(enemyProjGeo, basicMat(m.R.tint ? 0xff3b8a : 0xff5a5a));
+    const glow = new THREE.Sprite(glowSpriteMat(m.R.tint ? 0xff2a7a : 0xff4040));
+    glow.scale.setScalar(1.2);
+    mesh.add(glow);
     mesh.position.set(m.x, 1.0, m.z);
     scene.add(mesh);
     rt.enemyProj.push({ x: m.x, z: m.z, dx: dx / L, dz: dz / L, speed: 8, life: 2.5, dmg: m.dmg, mesh });
@@ -1793,8 +2085,13 @@
     } else if (d < m.R.range + 0.6) {
       hurtPlayer(m.dmg, "phys");
       burst(rt.px, 0.9, rt.pz, 0xff8080, 4);
+      if (m.elite && m.elite.id === "vampiric" && rt.invuln <= 0) {
+        const h = Math.round(m.dmg * 1.5);
+        m.hp = Math.min(m.maxHp, m.hp + h);
+        addText(m.x, m.h + 0.4, m.z, "+" + h, "#ff4f6f", 0.9);
+      }
     }
-    m.cd = m.R.cd;
+    m.cd = m.R.cd * (m.cdMul || 1);
   }
 
   function updateMonster(m, dt) {
@@ -1837,7 +2134,7 @@
         addRingEffect(m.x, m.z, 3, 0xff3030, 1.0);
       }
       if (m.slamT <= 0) {
-        m.slamT = 4.2;
+        m.slamT = m.enraged ? 3.0 : 4.2;
         m.slamWarn = false;
         addRingEffect(m.x, m.z, 3, 0xffaa33, 0.5);
         burst(m.x, 0.3, m.z, 0xffaa33, 20);
@@ -2053,6 +2350,7 @@
     // Tenta rasei e slabă: la 35% acoperea culorile modelului și eroul apărea ca o siluetă plată.
     rt.player = instantiate(cls.model, RACE_PLAYER[state.race].tint, 0.06);
     rt.player.root.position.set(rt.px, 0, rt.pz);
+    addBlobShadow(rt.player.root, 1.15);
     scene.add(rt.player.root);
     rt.animsPlayer = cls.anims;
     playAct(rt.player, cls.anims.idle);
@@ -2135,10 +2433,22 @@
       if (!it) { invSel = null; return showDetail(); }
       actions = `<button data-act="unequip" type="button">Scoate</button>`;
     }
+    // Comparație cu obiectul echipat în același loc: verde câștigi, roșu pierzi.
+    let cmp = "";
+    if (invSel.from === "inv") {
+      const cur = state.equip[it.slot];
+      const sum = (x) => { const o = {}; if (x) for (const a of x.affixes) o[a.k] = (o[a.k] || 0) + a.v; return o; };
+      const a = sum(it), b = sum(cur);
+      const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])];
+      const rows = keys.map((k) => ({ k, d: Math.round(((a[k] || 0) - (b[k] || 0)) * 10) / 10 })).filter((r) => r.d !== 0)
+        .map((r) => `<div class="${r.d > 0 ? "cmp-up" : "cmp-down"}">${r.d > 0 ? "▲" : "▼"} ${STAT_TEXT[r.k].replace("+{v}", (r.d > 0 ? "+" : "") + r.d)}</div>`).join("");
+      cmp = `<div class="cmp-head">${cur ? "Față de " + cur.name + ":" : "Locul e gol: tot ce are e câștig."}</div>${cur ? rows || '<div class="cmp-head">Aceleași statistici.</div>' : ""}`;
+    }
     box.innerHTML = `
       <div class="it-name" style="color:${rarityColor(it.rarity)}">${it.name}</div>
       <div class="it-meta">${RARITY[it.rarity].label} · ${SLOT_NAME[it.slot]} · nivel obiect ${it.ilvl}</div>
       ${itemLines(it)}
+      ${cmp}
       <div class="acts">${actions}</div>`;
   }
 
@@ -2403,6 +2713,28 @@
     const dashPct = rt.dashCd > 0 ? (rt.dashCd / 1.6) * 100 : 0;
     $("dashBtn").querySelector(".cdv").style.setProperty("--cd", dashPct.toFixed(1) + "%");
     if (rt.comboT <= 0 && rt.combo > 0) { rt.combo = 0; $("combo").classList.remove("show"); }
+    $("vignette").classList.toggle("low", !rt.dead && rt.life / rt.maxLife < 0.3);
+    // Bara boss-ului apare când boss-ul e aproape; prima dată se anunță.
+    let boss = null, bd = Infinity;
+    for (const m of rt.monsters) {
+      if (!m.boss || !m.alive) continue;
+      const d = Math.hypot(m.x - rt.px, m.z - rt.pz);
+      if (d < bd) { bd = d; boss = m; }
+    }
+    const near = boss && boss.alive && Math.hypot(boss.x - rt.px, boss.z - rt.pz) < 15;
+    if (near && !rt.bossSeen) {
+      rt.bossSeen = true;
+      msg(THEMES[state.mapIndex % THEMES.length].bossName, 2200);
+      sfx("boss", 0.6);
+    }
+    const bar = $("bossBar");
+    if (near) {
+      bar.hidden = false;
+      const nm = $("bossName");
+      nm.textContent = THEMES[state.mapIndex % THEMES.length].bossName + (boss.enraged ? " · furios" : "");
+      nm.classList.toggle("rage", !!boss.enraged);
+      $("bossFill").style.width = (100 * clamp(boss.hp / boss.maxHp, 0, 1)).toFixed(1) + "%";
+    } else if (!bar.hidden) bar.hidden = true;
   }
 
   const v3 = new THREE.Vector3();
@@ -2416,14 +2748,22 @@
     fx.textAlign = "center";
     fx.font = "600 13px Inter, sans-serif";
     for (const m of rt.monsters) {
-      if (!m.alive || (m.hurtT <= 0 && !m.boss)) continue;
+      if (!m.alive || m.far || (m.hurtT <= 0 && !m.boss && !m.elite)) continue;
       const p = project(m.x, m.h + 0.5, m.z);
       if (p.z > 1) continue;
-      const bw = m.boss ? 120 : 44;
+      const bw = m.boss ? 90 : m.elite ? 64 : 44;
       fx.fillStyle = "rgba(0,0,0,0.7)";
       fx.fillRect(p.x - bw / 2, p.y - 6, bw, 5);
-      fx.fillStyle = m.boss ? "#ffb14a" : "#d84545";
+      fx.fillStyle = m.boss ? "#ffb14a" : m.elite ? hexCss(m.elite.color) : "#d84545";
       fx.fillRect(p.x - bw / 2, p.y - 6, bw * clamp(m.hp / m.maxHp, 0, 1), 5);
+      if (m.elite) {
+        fx.font = "700 11px Inter, sans-serif";
+        fx.fillStyle = "rgba(0,0,0,0.8)";
+        fx.fillText(m.name, p.x + 1, p.y - 10);
+        fx.fillStyle = hexCss(m.elite.color);
+        fx.fillText(m.name, p.x, p.y - 11);
+        fx.font = "600 13px Inter, sans-serif";
+      }
     }
     for (let i = rt.texts.length - 1; i >= 0; i--) {
       const t = rt.texts[i];
@@ -2439,6 +2779,73 @@
       fx.fillText(t.text, p.x, p.y);
     }
     fx.globalAlpha = 1;
+  }
+
+  /* ============================================================
+     Minimap cu ceață de război
+     Harta descoperită se pictează o singură dată, câte un pixel pe placă, într-un canvas ascuns;
+     minimap-ul doar îl desenează scalat în jurul eroului, de ~8 ori pe secundă.
+     ============================================================ */
+  const mini = $("minimap");
+  const mctx = mini.getContext("2d");
+  const explored = new Uint8Array(TILE_W * TILE_H);
+  const mapLayer = document.createElement("canvas");
+  mapLayer.width = TILE_W; mapLayer.height = TILE_H;
+  const lctx = mapLayer.getContext("2d");
+  let miniBig = false;
+  function sizeMinimap() {
+    const css = miniBig ? 200 : 104;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    mini.width = Math.round(css * dpr); mini.height = Math.round(css * dpr);
+  }
+  sizeMinimap();
+  mini.addEventListener("click", () => { miniBig = !miniBig; mini.classList.toggle("big", miniBig); sizeMinimap(); drawMinimap(); });
+  function resetMinimap() { explored.fill(0); lctx.clearRect(0, 0, TILE_W, TILE_H); }
+  function exploreAround() {
+    const cx = Math.floor(rt.px), cz = Math.floor(rt.pz), R = 8;
+    for (let j = cz - R; j <= cz + R; j++) for (let i = cx - R; i <= cx + R; i++) {
+      if (i < 0 || j < 0 || i >= TILE_W || j >= TILE_H) continue;
+      const k = j * TILE_W + i;
+      if (explored[k] || (i - cx) ** 2 + (j - cz) ** 2 > R * R) continue;
+      explored[k] = 1;
+      if (grid[k] === 0) { lctx.fillStyle = "rgba(160,148,128,0.55)"; lctx.fillRect(i, j, 1, 1); }
+      else if (isFloor(i + 1.5, j + 0.5) || isFloor(i - 0.5, j + 0.5) || isFloor(i + 0.5, j + 1.5) || isFloor(i + 0.5, j - 0.5)) {
+        lctx.fillStyle = "rgba(217,178,111,0.95)"; lctx.fillRect(i, j, 1, 1);
+      }
+    }
+  }
+  const seen = (x, z) => explored[Math.floor(z) * TILE_W + Math.floor(x)] === 1;
+  function drawMinimap() {
+    const W = mini.width;
+    const VR = miniBig ? 34 : 18; // rază vizibilă, în plăci
+    const k = W / (2 * VR);
+    mctx.setTransform(1, 0, 0, 1, 0, 0);
+    mctx.clearRect(0, 0, W, W);
+    mctx.save();
+    mctx.beginPath(); mctx.arc(W / 2, W / 2, W / 2 - 1, 0, Math.PI * 2); mctx.clip();
+    mctx.setTransform(k, 0, 0, k, (VR - rt.px) * k, (VR - rt.pz) * k);
+    mctx.imageSmoothingEnabled = false;
+    mctx.drawImage(mapLayer, 0, 0);
+    const px = (W / (miniBig ? 200 : 104)) / k; // un pixel CSS, în plăci
+    const dot = (x, z, r, col) => { mctx.fillStyle = col; mctx.beginPath(); mctx.arc(x, z, r * px, 0, Math.PI * 2); mctx.fill(); };
+    for (const p of rt.props) if (p.chest && !p.opened && seen(p.x, p.z)) dot(p.x, p.z, 2.4, "#ffd34d");
+    for (const g of rt.ground) if (seen(g.x, g.z)) dot(g.x, g.z, 1.6, g.globe ? "#ff4060" : rarityColor(g.item.rarity));
+    for (const m of rt.monsters) {
+      if (!m.alive || !seen(m.x, m.z)) continue;
+      if (m.boss) dot(m.x, m.z, 4, "#ff7a2a");
+      else if (m.elite) dot(m.x, m.z, 3, hexCss(m.elite.color));
+      else dot(m.x, m.z, 1.8, "#e04848");
+    }
+    if (rt.portal) dot(rt.portal.position.x, rt.portal.position.z, 3.5, "#7af0ff");
+    // Eroul: săgeată aurie în direcția privirii.
+    const a = Math.atan2(rt.face.z, rt.face.x), L = 5 * px;
+    mctx.fillStyle = "#fff3c4";
+    mctx.beginPath();
+    mctx.moveTo(rt.px + Math.cos(a) * L * 1.4, rt.pz + Math.sin(a) * L * 1.4);
+    mctx.lineTo(rt.px + Math.cos(a + 2.5) * L, rt.pz + Math.sin(a + 2.5) * L);
+    mctx.lineTo(rt.px + Math.cos(a - 2.5) * L, rt.pz + Math.sin(a - 2.5) * L);
+    mctx.closePath(); mctx.fill();
+    mctx.restore();
   }
 
   /* ============================================================
@@ -2486,7 +2893,7 @@
   // 28 acoperă colțurile ecranului și pe ecrane late în landscape (~24 unități), cu marjă.
   const FAR2 = 28 * 28;
 
-  let lastHudT = 0;
+  let lastHudT = 0, lastMiniT = 0, miniTick = 0;
   let saveT = 0;
   let last = performance.now();
 
@@ -2517,7 +2924,10 @@
         m.ent.root.visible = !far;
         m.ent.root.matrixWorldAutoUpdate = !far;
       }
-      if (!far) m.ent.mixer.update(gdt);
+      if (!far) {
+        m.ent.mixer.update(gdt);
+        if (m.aura && m.alive) { const s = m.r * 5.5 * (1 + 0.08 * Math.sin(now / 160 + m.x)); m.aura.scale.set(s, 1, s); }
+      }
       if (m.ent.flashT > 0) { m.ent.flashT -= dt; if (m.ent.flashT <= 0) m.ent.flashAmt = 0; }
       if (m.ent.oneShot) { m.ent.oneShotT -= dt; if (m.ent.oneShotT <= 0 && !m.ent.dead) { m.ent.oneShot = false; } }
       applyFlash(m.ent);
@@ -2546,6 +2956,13 @@
 
     updateEffects(dt);
     updateParticles(dt);
+    updateTorches(now / 1000);
+    updateDust(dt);
+    if (now - lastMiniT > 120) {
+      lastMiniT = now;
+      if (++miniTick % 2 === 0) exploreAround();
+      drawMinimap();
+    }
     for (const g of rt.ground) {
       g.t += dt;
       g.gem.rotation.y += dt * 2;
@@ -2605,6 +3022,19 @@
   function checkPickupsAndPortal() {
     for (let i = rt.ground.length - 1; i >= 0; i--) {
       const g = rt.ground[i];
+      if (g.globe) {
+        if (Math.hypot(g.x - rt.px, g.z - rt.pz) < 1.4) {
+          const heal = Math.round(rt.maxLife * 0.22);
+          rt.life = Math.min(rt.maxLife, rt.life + heal);
+          rt.mana = Math.min(rt.maxMana, rt.mana + rt.maxMana * 0.1);
+          addText(rt.px, 1.9, rt.pz, "+" + heal, "#7dff9b", 1.1);
+          burst(g.x, 0.6, g.z, 0xff4060, 12);
+          sfx("gem", 0.45);
+          disposeGround(g);
+          rt.ground.splice(i, 1);
+        }
+        continue;
+      }
       if (Math.hypot(g.x - rt.px, g.z - rt.pz) < 1.1) {
         if (state.inv.length < 24) {
           state.inv.push(g.item);
@@ -2662,7 +3092,7 @@
     $("loadTxt").style.color = "#ff8a8a";
   });
 
-  window.__ruine = { rt, state, TREE, SKILLS, CLASSES, MODELS, beginGame, useSkill, usePotion, startDash, openPanel, closePanels, spawnMonster, killMonster, nextMap, hurtPlayer, makeItem, dropItem, breakProp, treeView: () => ({ view, treeCanvas }) };
+  window.__ruine = { rt, state, TREE, SKILLS, CLASSES, MODELS, beginGame, useSkill, usePotion, startDash, openPanel, closePanels, spawnMonster, killMonster, nextMap, hurtPlayer, makeItem, dropItem, breakProp, damageMonster, treeView: () => ({ view, treeCanvas }) };
 </script>
 </body>
 </html>

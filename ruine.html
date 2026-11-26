@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<meta name="description" content="Ruinele Umbrei — joc de acțiune și loot în Three.js, cu arbore de pasive, echipament și hărți generate.">
+<meta name="description" content="Ruinele Umbrei — joc de acțiune și loot în Three.js, cu personaje animate, temnițe generate și arbore de pasive.">
 <title>Ruinele Umbrei</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -11,7 +11,7 @@
 <style>
   :root {
     --bg: #07060a;
-    --panel: rgba(14, 12, 18, 0.92);
+    --panel: #0c0a10;
     --line: rgba(217, 178, 111, 0.22);
     --gold: #d9b26f;
     --text: #ece5d3;
@@ -70,7 +70,7 @@
     position: absolute;
     top: 30%;
     left: 50%;
-    transform: translateX(-50%);
+    transform: translate(-50%, 0) scale(0.96);
     max-width: 88vw;
     text-align: center;
     font-family: var(--display);
@@ -78,11 +78,26 @@
     color: var(--gold);
     text-shadow: 0 2px 6px #000;
     opacity: 0;
-    transition: opacity 0.3s;
+    transition: opacity 0.25s, transform 0.25s;
     pointer-events: none;
   }
-  #msg.show { opacity: 1; }
-
+  #msg.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  #combo {
+    position: absolute;
+    top: 33%;
+    right: 14px;
+    font-family: var(--display);
+    font-size: 26px;
+    font-weight: 700;
+    color: #ffd34d;
+    text-shadow: 0 2px 10px #000, 0 0 18px rgba(255, 180, 60, 0.45);
+    opacity: 0;
+    transform: scale(0.8);
+    transition: opacity 0.4s, transform 0.2s;
+    pointer-events: none;
+  }
+  #combo.show { opacity: 1; }
+  #combo.pop { transform: scale(1.18); }
   .joy { position: absolute; width: 110px; height: 110px; margin: -55px 0 0 -55px; border-radius: 50%; border: 1px solid var(--line); background: rgba(0,0,0,0.25); display: none; pointer-events: none; }
   .joy.on { display: block; }
   .joy i { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: rgba(217,178,111,0.35); border: 1px solid var(--gold); }
@@ -113,6 +128,7 @@
     box-shadow: 0 6px 18px rgba(0,0,0,0.6);
   }
   .skill.pot { width: 56px; height: 56px; border-color: #c04848; background: radial-gradient(circle at 35% 30%, #4a1616, #120707); }
+  .skill.dash { width: 56px; height: 56px; border-color: #7af0ff; background: radial-gradient(circle at 35% 30%, #173a48, #07121a); }
   .skill .cdv {
     position: absolute;
     inset: 0;
@@ -122,8 +138,11 @@
   .skill span { position: relative; z-index: 1; }
   .skill b { position: absolute; right: 5px; bottom: 3px; font-size: 11px; color: var(--gold); z-index: 1; }
   .skill:active { transform: scale(0.95); }
+  .skill:disabled { cursor: default; }
+  .skillrow { position: absolute; right: max(12px, env(safe-area-inset-right, 0px)); bottom: max(14px, env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; align-items: flex-end; gap: 10px; pointer-events: auto; }
+  .skillrow .skills { position: static; }
 
-  /* Screens and panels */
+  /* Ecrane și panouri */
   .screen, .panel {
     position: fixed;
     inset: 0;
@@ -164,7 +183,11 @@
     color: var(--text);
     cursor: pointer;
   }
+  .cta button:disabled { opacity: 0.45; cursor: default; }
   .cta button.secondary { background: transparent; border-color: var(--line); font-size: 14px; }
+  .loadbar { height: 6px; border-radius: 4px; background: rgba(255,255,255,0.08); overflow: hidden; margin-top: 18px; }
+  .loadbar i { display: block; height: 100%; width: 0; background: var(--gold); transition: width 0.2s; }
+  .loadtxt { text-align: center; font-size: 13px; color: var(--muted); margin-top: 8px; }
   .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
   .panel-head .pts { font-family: var(--display); color: var(--gold); font-size: 14px; }
   .close { border: 1px solid var(--line); background: rgba(0,0,0,0.4); border-radius: 10px; padding: 9px 14px; cursor: pointer; font-family: var(--display); font-size: 12px; }
@@ -175,7 +198,7 @@
     padding: 10px 12px;
     border-radius: 12px;
     border: 1px solid var(--line);
-    background: rgba(18,15,24,0.9);
+    background: rgba(18,15,24,0.96);
     font-size: 13px;
     line-height: 1.5;
   }
@@ -218,11 +241,9 @@
   .detail .acts button.danger { border-color: #a33; background: rgba(60,14,14,0.8); }
   .statbox { font-size: 12px; color: var(--muted); line-height: 1.7; columns: 2; column-gap: 14px; margin-top: 6px; }
   .statbox b { color: var(--text); font-weight: 600; }
-
-  .dead-screen .screen-inner { text-align: center; }
   .dead-screen h1 { color: #d05050; }
-
-  @media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
+  .dead-screen .screen-inner { text-align: center; }
+  @media (prefers-reduced-motion: reduce) { .bar i { transition: none; } #msg, #combo { transition: none; } }
 </style>
 </head>
 <body>
@@ -241,35 +262,45 @@
     <div class="hud-btns">
       <button class="btn-ghost" data-open="tree" type="button">Arbore</button>
       <button class="btn-ghost" data-open="inv" type="button">Inventar</button>
+      <button class="btn-ghost" id="sndBtn" type="button">Sunet: da</button>
     </div>
   </div>
-  <div id="msg"></div>
+  <div id="msg" role="status"></div>
+  <div id="combo" aria-live="polite"></div>
   <div class="joy" id="joy"><i id="joyKnob"></i></div>
-  <div class="skills" id="skillBar">
-    <button class="skill" data-skill="0" id="sk0" type="button"><span class="cdv"></span><span id="sk0n">Abilitate</span><b>1</b></button>
-    <button class="skill" data-skill="1" id="sk1" type="button"><span class="cdv"></span><span id="sk1n">Abilitate</span><b>2</b></button>
-    <button class="skill" data-skill="2" id="sk2" type="button"><span class="cdv"></span><span id="sk2n">Abilitate</span><b>3</b></button>
-    <button class="skill pot" id="potBtn" type="button"><span class="cdv"></span><span>Viață</span><b id="potCount">3</b></button>
+  <div class="skillrow">
+    <div class="skills">
+      <button class="skill dash" id="dashBtn" type="button"><span class="cdv"></span><span>Rostogolire</span><b>R</b></button>
+    </div>
+    <div class="skills" id="skillBar">
+      <button class="skill" data-skill="0" id="sk0" type="button"><span class="cdv"></span><span id="sk0n">Abilitate</span><b>1</b></button>
+      <button class="skill" data-skill="1" id="sk1" type="button"><span class="cdv"></span><span id="sk1n">Abilitate</span><b>2</b></button>
+      <button class="skill" data-skill="2" id="sk2" type="button"><span class="cdv"></span><span id="sk2n">Abilitate</span><b>3</b></button>
+      <button class="skill pot" id="potBtn" type="button"><span class="cdv"></span><span>Viață</span><b id="potCount">3</b></button>
+    </div>
   </div>
 </div>
 
 <section class="screen" id="startScreen">
   <div class="screen-inner">
     <h1>Ruinele Umbrei</h1>
-    <p class="subtitle">Coboară prin hărți generate, învinge monștri din șase rase, adună echipament și construiește-ți arborele de pasive.</p>
+    <p class="subtitle">Coboară prin temnițe generate, învinge monștri animați din șase rase, sparge lăzi, adună echipament și construiește-ți arborele de pasive.</p>
     <div class="label">Rasă</div>
     <div class="choices" id="raceChoices" role="radiogroup" aria-label="Rasă"></div>
     <div class="label">Clasă</div>
     <div class="choices" id="classChoices" role="radiogroup" aria-label="Clasă"></div>
+    <div class="loadbar" id="loadBar"><i id="loadFill"></i></div>
+    <p class="loadtxt" id="loadTxt">Se încarcă modelele și sunetele…</p>
     <div class="cta">
-      <button type="button" id="btnContinue" hidden>Continuă jocul salvat</button>
-      <button type="button" id="btnNew">Începe un joc nou</button>
+      <button type="button" id="btnContinue" hidden disabled>Continuă jocul salvat</button>
+      <button type="button" id="btnNew" disabled>Începe un joc nou</button>
       <button type="button" class="secondary" id="btnHelp">Comenzi</button>
     </div>
     <p class="subtitle" id="helpText" hidden style="text-align:left;font-size:13px;margin-top:16px">
-      Pe telefon: glisează pe jumătatea stângă a ecranului pentru a te mișca. Atinge 1, 2 și 3 pentru abilități, iar butonul roșu bea o poțiune. Abilitățile țintesc automat cel mai apropiat monstru. Pe calculator: WASD sau săgețile, tastele 1-3 și Q pentru poțiune. Atacul de bază se execută automat.
+      Pe telefon: glisează pe jumătatea stângă a ecranului pentru a te mișca. 1, 2 și 3 sunt abilități, roșu bea poțiunea, iar albastrul te rostogolește (ești invulnerabil scurt). Abilitățile țintesc automat cel mai apropiat monstru. Pe calculator: WASD sau săgețile, 1-3, R pentru rostogolire și Q pentru poțiune. Lăzile și barilele se sparg; cufărele se deschid atingându-le.
     </p>
     <p class="subtitle" id="saveNote" style="font-size:12px"></p>
+    <p class="subtitle" style="font-size:11px">Modele, animații și sunete: CC0 (Quaternius, Kenney, Screaming Brain Studios). Vezi assets/ruine/CREDITS.txt.</p>
   </div>
 </section>
 
@@ -280,7 +311,7 @@
     <button class="close" data-close type="button">Închide</button>
   </div>
   <canvas id="treeCanvas"></canvas>
-  <div class="tree-info" id="treeInfo"><b>Arbore</b><div class="hint">Atinge un nod pentru detalii. Trage pentru a te mișca, ciupește pentru zoom.</div></div>
+  <div class="tree-info" id="treeInfo"></div>
 </section>
 
 <section class="panel" id="panelInv" hidden>
@@ -288,10 +319,10 @@
     <h2>Inventar</h2>
     <button class="close" data-close type="button">Închide</button>
   </div>
-  <div class="screen-inner" style="margin:0;width:100%;max-width:640px;margin-inline:auto;overflow-y:auto;padding:0 2px 12px;">
+  <div style="overflow-y:auto;width:100%;max-width:640px;margin-inline:auto;padding:0 2px 12px;">
     <div class="label" style="margin-top:4px">Echipament</div>
     <div class="equip-grid" id="equipGrid"></div>
-    <div class="label">Stats</div>
+    <div class="label">Statistici</div>
     <div class="statbox" id="statBox"></div>
     <div class="label">Rucsac (<span id="invCount">0</span>/24)</div>
     <div class="inv-grid" id="invGrid"></div>
@@ -302,21 +333,25 @@
 <section class="screen dead-screen" id="deadScreen" hidden>
   <div class="screen-inner">
     <h1>Ai căzut</h1>
-    <p class="subtitle">Umbrele te-au învins. Harta curentă va fi regenerată, iar echipamentul și arborele rămân ale tale.</p>
-    <div class="cta"><button type="button" id="btnRespawn">Reîncepe harta</button></div>
+    <p class="subtitle">Umbrele te-au învins. Temnița curentă va fi regenerată, iar echipamentul și arborele rămân ale tale.</p>
+    <div class="cta"><button type="button" id="btnRespawn">Reîncepe temnița</button></div>
   </div>
 </section>
 
 <script type="importmap">
   {
     "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
     }
   }
 </script>
 
 <script type="module">
   import * as THREE from "three";
+  import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+  import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
+  import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 
   /* ============================================================
      Utilități
@@ -328,6 +363,7 @@
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
   const lerp = (a, b, t) => a + (b - a) * t;
   const SAVE_KEY = "ruinele-umbrei-v1";
+  const ASSET = "assets/ruine/";
 
   function mulberry32(a) {
     return function () {
@@ -355,29 +391,50 @@
   const statLine = (k, v) => STAT_TEXT[k].replace("{v}", String(Math.round(v * 10) / 10));
 
   const RACE_PLAYER = {
-    om:    { name: "Om",    skin: 0xf1c9a5, bonus: { life: 10, xpMul: 10 }, desc: "Echilibrat. +10 viață, +10% experiență." },
-    elf:   { name: "Elf",   skin: 0xd8ffe8, bonus: { speed: 12, crit: 4, mana: 10 }, desc: "Rapid. +12% viteză, +4% critic, +10 mană." },
-    ork:   { name: "Ork",   skin: 0x8fbf6b, bonus: { life: 20, armor: 10, speed: -5 }, desc: "Rezistent. +20 viață, +10 armură, -5% viteză." },
-    pitic: { name: "Pitic", skin: 0xd9a57a, bonus: { armor: 25, resFire: 15, speed: -10 }, desc: "Blindat. +25 armură, +15% foc, -10% viteză." }
+    om:    { name: "Om",    tint: 0xf1c9a5, bonus: { life: 10, xpMul: 10 }, desc: "Echilibrat. +10 viață, +10% experiență." },
+    elf:   { name: "Elf",   tint: 0xd8ffe8, bonus: { speed: 12, crit: 4, mana: 10 }, desc: "Rapid. +12% viteză, +4% critic, +10 mană." },
+    ork:   { name: "Ork",   tint: 0x8fbf6b, bonus: { life: 20, armor: 10, speed: -5 }, desc: "Rezistent. +20 viață, +10 armură, -5% viteză." },
+    pitic: { name: "Pitic", tint: 0xd9a57a, bonus: { armor: 25, resFire: 15, speed: -10 }, desc: "Blindat. +25 armură, +15% foc, -10% viteză." }
+  };
+
+  /* Modelele GLB sunt încărcate o singură dată. h = înălțimea țintă în unități. */
+  const MODEL_DEF = {
+    hooded:   { file: "hooded_adventurer", h: 1.75 },
+    adventurer: { file: "adventurer", h: 1.8 },
+    rogue:    { file: "rogue", h: 1.7 },
+    goblin:   { file: "goblin", h: 1.0 },
+    orc:      { file: "orc_brute", h: 1.9 },
+    skeleton: { file: "skeleton_grunt", h: 1.7 },
+    demon:    { file: "demon", h: 1.9 },
+    wolf:     { file: "wolf", h: 0.95 },
+    ghost:    { file: "ghost", h: 1.3 },
+    barrel:   { file: "barrel", h: 0.9 },
+    crate:    { file: "crate", h: 0.9 },
+    chest:    { file: "chest", h: 0.8 },
+    column:   { file: "column", h: 2.4 },
+    crystal:  { file: "crystal", h: 1.6 }
   };
 
   const CLASSES = {
     mage: {
-      name: "Mag", color: 0x7af0ff, base: { life: 60, mana: 100, armor: 3 },
+      name: "Mag", color: 0x7af0ff, model: "hooded", base: { life: 60, mana: 100, armor: 3 },
       skills: ["fireball", "frostnova", "chain"],
-      basic: { kind: "proj", dmg: 6, cd: 0.5, range: 10, speed: 15, elem: "fire", color: 0xffa050, aoe: 0 },
+      basic: { kind: "proj", dmg: 6, cd: 0.5, range: 10, speed: 15, elem: "fire", color: 0xffa050, aoe: 0, anim: "cast" },
+      anims: { idle: ["Idle"], walk: ["Walk", "Run"], cast: ["Gun_Shoot", "Idle_Gun_Shoot"], hit: ["HitRecieve"], death: ["Death"], roll: ["Roll"] },
       desc: "Vrăji de foc, gheață și fulger. Fragil, dar devastator."
     },
     warrior: {
-      name: "Războinic", color: 0xffb36b, base: { life: 120, mana: 45, armor: 14 },
+      name: "Războinic", color: 0xffb36b, model: "adventurer", base: { life: 120, mana: 45, armor: 14 },
       skills: ["cleave", "slam", "battlecry"],
-      basic: { kind: "melee", dmg: 8, cd: 0.6, range: 2.0, arc: Math.PI * 0.8, elem: "phys", color: 0xffffff },
+      basic: { kind: "melee", dmg: 8, cd: 0.6, range: 2.0, arc: Math.PI * 0.8, elem: "phys", color: 0xffffff, anim: "cast" },
+      anims: { idle: ["Idle_Sword", "Idle"], walk: ["Run", "Walk"], cast: ["Sword_Slash", "Punch_Right"], hit: ["HitRecieve", "HitRecieve_2"], death: ["Death"], roll: ["Roll"] },
       desc: "Lovituri grele și strigăte de luptă. Rezistent în corp la corp."
     },
     ranger: {
-      name: "Arcaș", color: 0x9dff8a, base: { life: 85, mana: 65, armor: 7 },
+      name: "Arcaș", color: 0x9dff8a, model: "rogue", base: { life: 85, mana: 65, armor: 7 },
       skills: ["volley", "rapid", "trap"],
-      basic: { kind: "proj", dmg: 7, cd: 0.5, range: 12, speed: 20, elem: "phys", color: 0xdfffd0, aoe: 0 },
+      basic: { kind: "proj", dmg: 7, cd: 0.5, range: 12, speed: 20, elem: "phys", color: 0xdfffd0, aoe: 0, anim: "cast" },
+      anims: { idle: ["Idle"], walk: ["Walk", "Run"], cast: ["Dagger_Attack", "Dagger_Attack2"], hit: ["RecieveHit"], death: ["Death"], roll: ["Roll"] },
       desc: "Săgeți rapide, salve și capcane."
     }
   };
@@ -394,20 +451,39 @@
     trap:      { name: "Capcană", kind: "nova", dmg: 24, cd: 6, mana: 16, radius: 2.6, elem: "phys", atTarget: true, delay: 0.9, color: 0x66ff66 }
   };
 
+  /* Monștri: model, animații (prima din listă care există), mărime și comportament. */
   const RACES_MON = {
-    goblin:    { name: "Goblin", color: 0x7fbf4a, hp: 26, dmg: 5, speed: 3.6, range: 1.1, cd: 1.0, xp: 8, scale: 0.6, shape: "cone", aggro: 9 },
-    orc:       { name: "Orc", color: 0x4a8a3a, hp: 60, dmg: 9, speed: 2.4, range: 1.4, cd: 1.4, xp: 16, scale: 1.0, shape: "box", aggro: 8 },
-    undead:    { name: "Nemort", color: 0xc3cad8, hp: 40, dmg: 7, speed: 2.0, range: 1.2, cd: 1.2, xp: 14, scale: 0.95, shape: "thin", aggro: 8, revive: true, resist: { phys: 0.2 } },
-    demon:     { name: "Demon", color: 0xd33a3a, hp: 44, dmg: 10, speed: 2.6, range: 7.0, cd: 1.8, xp: 22, scale: 0.95, shape: "diamond", aggro: 11, ranged: true, resist: { fire: 0.5 } },
-    beast:     { name: "Fiară", color: 0x9a6a3a, hp: 34, dmg: 8, speed: 3.2, range: 1.3, cd: 1.1, xp: 15, scale: 0.8, shape: "beast", aggro: 9, pounce: true },
-    elemental: { name: "Elemental", color: 0x66d9ff, hp: 52, dmg: 6, speed: 1.9, range: 1.2, cd: 1.5, xp: 20, scale: 1.0, shape: "ico", aggro: 7, explode: { dmg: 12, radius: 2.2 }, resist: { lightning: 0.5 } }
+    goblin: {
+      name: "Goblin", model: "goblin", size: 0.9, hp: 26, dmg: 5, speed: 3.6, range: 1.2, cd: 1.0, xp: 8, aggro: 9,
+      anims: { idle: ["Idle"], walk: ["Run", "Walk"], attack: ["Attack", "Punch"], hit: ["HitRecieve", "HitReact"], death: ["Death"], cast: ["Attack"] }
+    },
+    orc: {
+      name: "Orc", model: "orc", size: 1.0, hp: 60, dmg: 9, speed: 2.4, range: 1.5, cd: 1.4, xp: 16, aggro: 8,
+      anims: { idle: ["Idle"], walk: ["Walk", "Run"], attack: ["Punch", "Weapon"], hit: ["HitReact", "HitRecieve"], death: ["Death"], cast: ["Weapon"] }
+    },
+    undead: {
+      name: "Nemort", model: "skeleton", size: 1.0, hp: 40, dmg: 7, speed: 2.0, range: 1.3, cd: 1.2, xp: 14, aggro: 8, revive: true, resist: { phys: 0.2 }, tint: 0x6a7aa8,
+      anims: { idle: ["Idle"], walk: ["Walk", "Run"], attack: ["Attack", "Punch"], hit: ["HitRecieve", "HitReact"], death: ["Death"], cast: ["Attack"] }
+    },
+    demon: {
+      name: "Demon", model: "demon", size: 1.0, hp: 44, dmg: 10, speed: 2.6, range: 7.0, cd: 1.8, xp: 22, aggro: 11, ranged: true, resist: { fire: 0.5 }, tint: 0x8a1a1a,
+      anims: { idle: ["Idle"], walk: ["Walk", "Run"], attack: ["Punch"], hit: ["HitReact"], death: ["Death"], cast: ["Weapon", "Punch"] }
+    },
+    beast: {
+      name: "Fiară", model: "wolf", size: 1.0, hp: 34, dmg: 8, speed: 3.4, range: 1.4, cd: 1.1, xp: 15, aggro: 9, pounce: true,
+      anims: { idle: ["Idle", "Idle_2"], walk: ["Walk", "Gallop"], attack: ["Attack", "Gallop_Jump"], hit: ["Idle_HitReact_Left", "Idle_HitReact_Right"], death: ["Death"], cast: ["Attack"] }
+    },
+    elemental: {
+      name: "Elemental", model: "ghost", size: 1.0, hp: 52, dmg: 6, speed: 2.0, range: 1.3, cd: 1.5, xp: 20, aggro: 7, explode: { dmg: 12, radius: 2.2 }, resist: { lightning: 0.5 }, tint: 0x2f9fd8,
+      anims: { idle: ["Flying_Idle", "Idle"], walk: ["Fast_Flying", "Flying_Idle"], attack: ["Headbutt", "Punch"], hit: ["HitReact"], death: ["Death"], cast: ["Punch"] }
+    }
   };
 
   const THEMES = [
-    { name: "Catacombe", floor: 0x2a2a33, wall: 0x4a4a58, fog: 0x0a0a10, light: 0x9fb3ff, pool: ["undead", "goblin", "beast"], boss: "orc", bossName: "Comandantul Nemort" },
-    { name: "Pădurea Spinilor", floor: 0x1f3a24, wall: 0x2f5a34, fog: 0x06120a, light: 0xa6ffb0, pool: ["goblin", "beast", "orc"], boss: "beast", bossName: "Mama Fiarelor" },
-    { name: "Fortăreața Orcilor", floor: 0x3a2a1e, wall: 0x5c4330, fog: 0x110a06, light: 0xffb27a, pool: ["orc", "demon", "goblin"], boss: "orc", bossName: "Warlordul" },
-    { name: "Cristalul Elemental", floor: 0x1d2a3f, wall: 0x3a5a8a, fog: 0x050913, light: 0x8ae6ff, pool: ["elemental", "demon", "undead"], boss: "demon", bossName: "Străjerul Abisal" }
+    { name: "Catacombe", floor: 0xb0b0c0, wall: 0xa8a6b8, fog: 0x0a0a10, light: 0xb4c2ff, pool: ["undead", "goblin", "beast"], boss: "orc", bossName: "Comandantul Nemort" },
+    { name: "Pădurea Spinilor", floor: 0xa8c8a0, wall: 0x8ea888, fog: 0x06120a, light: 0xc0ffc8, pool: ["goblin", "beast", "orc"], boss: "beast", bossName: "Mama Fiarelor" },
+    { name: "Fortăreața Orcilor", floor: 0xc8ae92, wall: 0xb08a68, fog: 0x110a06, light: 0xffc8a0, pool: ["orc", "demon", "goblin"], boss: "orc", bossName: "Warlordul" },
+    { name: "Cristalul Elemental", floor: 0x9fb4d8, wall: 0x7d98c8, fog: 0x050913, light: 0xa0e8ff, pool: ["elemental", "demon", "undead"], boss: "demon", bossName: "Străjerul Abisal" }
   ];
 
   const SLOTS = ["weapon", "head", "chest", "hands", "feet", "ring", "amulet"];
@@ -495,12 +571,7 @@
         nodes.push({ id, x, y, ring: r, type, name, stats, links: [] });
         ids.push(id);
       }
-      // Legături inelare
-      for (let i = 0; i < count; i++) {
-        const a = ids[i], b = ids[(i + 1) % count];
-        link(nodes, a, b);
-      }
-      // Legături spre inelul anterior
+      for (let i = 0; i < count; i++) link(nodes, ids[i], ids[(i + 1) % count]);
       for (const id of ids) {
         const n = nodes[id];
         let best = prev[0], bd = Infinity;
@@ -510,7 +581,7 @@
           if (d < bd) { bd = d; best = pid; }
         }
         link(nodes, id, best);
-        if (prev.length > 1 && (n.id % 2 === 0)) {
+        if (prev.length > 1 && n.id % 2 === 0) {
           let second = null, sd = Infinity;
           for (const pid of prev) {
             if (pid === best) continue;
@@ -535,10 +606,7 @@
   /* ============================================================
      Stare persistentă
      ============================================================ */
-  const state = {
-    race: "om", cls: "mage", level: 1, xp: 0,
-    alloc: [0], inv: [], equip: {}, mapIndex: 0, potions: 3
-  };
+  const state = { race: "om", cls: "mage", level: 1, xp: 0, alloc: [0], inv: [], equip: {}, mapIndex: 0, potions: 3 };
 
   function save() {
     try {
@@ -555,7 +623,7 @@
       const d = JSON.parse(raw);
       if (!d || !RACE_PLAYER[d.race] || !CLASSES[d.cls]) return false;
       Object.assign(state, {
-        race: d.race, cls: d.cls, level: d.level | 0 || 1, xp: d.xp | 0,
+        race: d.race, cls: d.cls, level: (d.level | 0) || 1, xp: d.xp | 0,
         alloc: Array.isArray(d.alloc) && d.alloc.includes(0) ? d.alloc : [0],
         inv: Array.isArray(d.inv) ? d.inv : [], equip: d.equip || {},
         mapIndex: d.mapIndex | 0, potions: d.potions | 0
@@ -565,6 +633,12 @@
   }
   function hasSave() {
     try { return !!localStorage.getItem(SAVE_KEY); } catch (e) { return false; }
+  }
+  function loadPref(key, def) {
+    try { const v = localStorage.getItem(key); return v === null ? def : v === "1"; } catch (e) { return def; }
+  }
+  function savePref(key, on) {
+    try { localStorage.setItem(key, on ? "1" : "0"); } catch (e) { /* ignorat */ }
   }
 
   /* ============================================================
@@ -580,11 +654,8 @@
     }
     if (rarity === "unique") {
       const cand = UNIQUES.filter((u) => u.slot === slot);
-      const u = cand.length ? pick(cand) : UNIQUES[Math.floor(Math.random() * UNIQUES.length)];
-      return {
-        id: itemSeq++, name: u.name, rarity: "unique", slot: u.slot, ilvl,
-        affixes: u.affixes.map((a) => ({ k: a.k, v: a.v })), base: u.name
-      };
+      const u = cand.length ? pick(cand) : pick(UNIQUES);
+      return { id: itemSeq++, name: u.name, rarity: "unique", slot: u.slot, ilvl, affixes: u.affixes.map((a) => ({ k: a.k, v: a.v })) };
     }
     const base = pick(BASE_NAMES[slot]);
     const [lo, hi] = RARITY[rarity].affixes;
@@ -600,16 +671,49 @@
     let name = base;
     if (rarity === "magic") name = base + " " + pick(PREFIX_WORDS);
     if (rarity === "rare") name = pick(["Bestia", "Fantoma", "Jurământul", "Crucea"]) + " " + base.toLowerCase() + " " + pick(["al Furtunei", "al Umbrei", "al Abisului", "al Cenușii"]);
-    return { id: itemSeq++, name: name.charAt(0).toUpperCase() + name.slice(1), rarity, slot, ilvl, affixes, base };
+    return { id: itemSeq++, name: name.charAt(0).toUpperCase() + name.slice(1), rarity, slot, ilvl, affixes };
   }
   const rarityColor = (r) => RARITY[r] ? RARITY[r].color : "#ccc";
-
-  function itemLines(it) {
-    return it.affixes.map((a) => `<div class="it-line">${statLine(a.k, a.v)}</div>`).join("");
-  }
+  const itemLines = (it) => it.affixes.map((a) => `<div class="it-line">${statLine(a.k, a.v)}</div>`).join("");
 
   /* ============================================================
-     Three.js
+     Sunet
+     ============================================================ */
+  const SFX = {};
+  ["hit", "kill", "dash", "shoot", "level_up", "coin", "gem", "hurt", "boss", "revive", "downed", "impact", "big_kill", "confirm", "step"].forEach((n) => {
+    const a = new Audio(ASSET + "sfx/" + n + ".ogg");
+    a.preload = "auto";
+    SFX[n] = a;
+  });
+  const music = new Audio(ASSET + "music/battle_theme_a.mp3");
+  music.loop = true;
+  music.volume = 0.22;
+  const sfxLast = {};
+  let soundOn = loadPref("ruine-sunet", true);
+  function sfx(name, vol = 0.5) {
+    if (!soundOn) return;
+    const now = performance.now();
+    if (sfxLast[name] && now - sfxLast[name] < 45) return;
+    sfxLast[name] = now;
+    const base = SFX[name];
+    if (!base) return;
+    const a = base.cloneNode();
+    a.volume = vol;
+    a.play().catch(() => {});
+  }
+  function refreshSoundBtn() {
+    $("sndBtn").textContent = "Sunet: " + (soundOn ? "da" : "nu");
+    if (!soundOn) music.pause();
+    else if (rt.started) music.play().catch(() => {});
+  }
+  $("sndBtn").addEventListener("click", () => {
+    soundOn = !soundOn;
+    savePref("ruine-sunet", soundOn);
+    refreshSoundBtn();
+  });
+
+  /* ============================================================
+     Three.js: renderer, scenă, lumini
      ============================================================ */
   const canvas = $("gl");
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
@@ -617,15 +721,18 @@
   renderer.setPixelRatio(PIXEL_RATIO);
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.1;
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x07060a);
-  scene.fog = new THREE.FogExp2(0x07060a, 0.03);
-  const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 160);
-  const ambient = new THREE.AmbientLight(0xa0a0c0, 1.6);
-  const sun = new THREE.DirectionalLight(0xffffff, 2.0);
-  sun.position.set(10, 22, 8);
-  scene.add(ambient, sun);
+  scene.fog = new THREE.FogExp2(0x07060a, 0.02);
+  const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 200);
+  const ambient = new THREE.HemisphereLight(0xd0d8ff, 0x5a4636, 2.6);
+  const sun = new THREE.DirectionalLight(0xffffff, 2.6);
+  sun.position.set(12, 28, 10);
+  const torch = new THREE.PointLight(0xffa860, 9, 16, 1.4);
+  scene.add(ambient, sun, torch);
 
   const fxCanvas = $("fx");
   const fx = fxCanvas.getContext("2d");
@@ -644,35 +751,168 @@
   }
   const elemColor = { fire: 0xff7a2e, cold: 0x8fe6ff, lightning: 0xfff06b, phys: 0xf2f2f2 };
 
-  /* Harta */
-  let mapGroup = new THREE.Group();
-  scene.add(mapGroup);
-  const TILE_W = 60, TILE_H = 60;
+  /* ============================================================
+     Încărcare modele și texturi
+     ============================================================ */
+  const MODELS = {};
+  const TEX = {};
+  async function loadAssets(onProgress) {
+    const loader = new GLTFLoader();
+    loader.setMeshoptDecoder(MeshoptDecoder);
+    const texLoader = new THREE.TextureLoader();
+    const jobs = Object.entries(MODEL_DEF).map(async ([key, def]) => {
+      const gltf = await loader.loadAsync(ASSET + "models/" + def.file + ".glb");
+      gltf.scene.updateMatrixWorld(true);
+      // Caseta reală: modelele cu schelet trebuie măsurate după transformările oaselor.
+      const box = new THREE.Box3();
+      gltf.scene.traverse((o) => {
+        if (o.isSkinnedMesh) {
+          o.skeleton.update();
+          o.computeBoundingBox();
+          box.union(o.boundingBox.clone().applyMatrix4(o.matrixWorld));
+        } else if (o.isMesh) {
+          box.union(new THREE.Box3().setFromObject(o));
+        }
+      });
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      MODELS[key] = { scene: gltf.scene, animations: gltf.animations, s: def.h / Math.max(0.001, size.y), minY: box.min.y };
+      onProgress();
+    });
+    const texJobs = ["surface_stone", "surface_wall", "surface_plate"].map(async (t) => {
+      const tex = await texLoader.loadAsync(ASSET + "textures/" + t + ".png");
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      TEX[t] = tex;
+      onProgress();
+    });
+    await Promise.all([...jobs, ...texJobs]);
+  }
+  const TOTAL_ASSETS = Object.keys(MODEL_DEF).length + 3;
+  let assetsDone = 0;
+  const assetProgress = () => {
+    assetsDone++;
+    $("loadFill").style.width = Math.round((assetsDone / TOTAL_ASSETS) * 100) + "%";
+  };
+
+  /* Instanță de model: clonare cu schelet, materiale proprii și mixer de animații. */
+  function instantiate(key, tint = null) {
+    const M = MODELS[key];
+    const root = new THREE.Group();
+    const body = SkeletonUtils.clone(M.scene);
+    body.scale.setScalar(M.s);
+    body.position.y = -M.minY * M.s;
+    root.add(body);
+    const mats = [];
+    body.traverse((o) => {
+      if (!o.isMesh) return;
+      const cloneMat = (m) => { const c = m.clone(); mats.push(c); return c; };
+      o.material = Array.isArray(o.material) ? o.material.map(cloneMat) : cloneMat(o.material);
+    });
+    const mixer = new THREE.AnimationMixer(body);
+    const actions = {};
+    for (const clip of M.animations) actions[clip.name.split("|").pop()] = mixer.clipAction(clip);
+    const baseEm = new THREE.Color(tint == null ? 0x000000 : tint);
+    if (tint != null) for (const m of mats) if (m.emissive) m.emissive.copy(baseEm).multiplyScalar(0.35);
+    return { root, body, mixer, actions, mats, baseEm, current: null, oneShot: false, oneShotT: 0, dead: false, flashT: 0, flashCol: new THREE.Color(), flashAmt: 0 };
+  }
+  function findAct(ent, names) {
+    for (const n of names) if (ent.actions[n]) return ent.actions[n];
+    return null;
+  }
+  function playAct(ent, names, opts = {}) {
+    if (!names) return null;
+    const act = findAct(ent, names);
+    if (!act || act === ent.current) return act;
+    const prev = ent.current;
+    const fade = opts.fade ?? 0.18;
+    const speed = opts.speed || 1;
+    act.enabled = true;
+    if (opts.once) { act.setLoop(THREE.LoopOnce, 1); act.clampWhenFinished = true; }
+    else { act.setLoop(THREE.LoopRepeat, Infinity); act.clampWhenFinished = false; }
+    act.reset();
+    act.timeScale = speed;
+    act.fadeIn(fade).play();
+    if (prev && prev !== act) prev.fadeOut(fade);
+    ent.current = act;
+    ent.oneShot = !!opts.once;
+    ent.oneShotT = opts.once ? (opts.dur ?? act.getClip().duration / speed) : 0;
+    return act;
+  }
+  function setFlash(ent, color, amt) {
+    ent.flashCol.set(color);
+    ent.flashAmt = amt;
+  }
+  function applyFlash(ent) {
+    if (!ent.mats.length) return;
+    const a = ent.flashAmt;
+    for (const m of ent.mats) {
+      if (!m.emissive) continue;
+      if (a > 0.01) m.emissive.copy(ent.baseEm).lerp(ent.flashCol, a);
+      else m.emissive.copy(ent.baseEm);
+    }
+  }
+  function disposeEnt(ent) {
+    ent.mixer.stopAllAction();
+    for (const m of ent.mats) m.dispose();
+  }
+
+  /* ============================================================
+     Temniță: generare, geometrie, coliziuni
+     ============================================================ */
+  const TILE_W = 96, TILE_H = 96;
   let grid = new Uint8Array(TILE_W * TILE_H).fill(1);
   let rooms = [];
+  let bossIdx = 0;
+  let mapGroup = new THREE.Group();
+  scene.add(mapGroup);
+
+  function carveCorridor(g, a, b) {
+    const set = (i, j) => { if (i >= 0 && j >= 0 && i < TILE_W - 1 && j < TILE_H - 1) { g[j * TILE_W + i] = 0; g[j * TILE_W + i + 1] = 0; g[(j + 1) * TILE_W + i] = 0; g[(j + 1) * TILE_W + i + 1] = 0; } };
+    for (let i = Math.min(a.x, b.x); i <= Math.max(a.x, b.x); i++) set(i, a.y);
+    for (let j = Math.min(a.y, b.y); j <= Math.max(a.y, b.y); j++) set(b.x, j);
+  }
 
   function generateGrid() {
-    for (let attempt = 0; attempt < 30; attempt++) {
+    for (let attempt = 0; attempt < 40; attempt++) {
       const g = new Uint8Array(TILE_W * TILE_H).fill(1);
       const rs = [];
-      for (let t = 0; t < 260 && rs.length < 9; t++) {
-        const w = rint(5, 9), h = rint(5, 9);
+      for (let t = 0; t < 800 && rs.length < 16; t++) {
+        const w = rint(6, 12), h = rint(6, 12);
         const x = rint(2, TILE_W - w - 3), y = rint(2, TILE_H - h - 3);
-        const ok = rs.every((r) => x + w + 2 < r.x || r.x + r.w + 2 < x || y + h + 2 < r.y || r.y + r.h + 2 < y);
+        const ok = rs.every((r) => x + w + 3 < r.x || r.x + r.w + 3 < x || y + h + 3 < r.y || r.y + r.h + 3 < y);
         if (!ok) continue;
         rs.push({ x, y, w, h });
         for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) g[j * TILE_W + i] = 0;
       }
-      if (rs.length < 4) continue;
-      const carve = (i, j) => { g[j * TILE_W + i] = 0; };
+      if (rs.length < 6) continue;
+      const center = (r) => ({ x: Math.floor(r.x + r.w / 2), y: Math.floor(r.y + r.h / 2) });
       for (let k = 1; k < rs.length; k++) {
-        const a = { x: Math.floor(rs[k - 1].x + rs[k - 1].w / 2), y: Math.floor(rs[k - 1].y + rs[k - 1].h / 2) };
-        const b = { x: Math.floor(rs[k].x + rs[k].w / 2), y: Math.floor(rs[k].y + rs[k].h / 2) };
-        for (let i = Math.min(a.x, b.x); i <= Math.max(a.x, b.x); i++) carve(i, a.y);
-        for (let j = Math.min(a.y, b.y); j <= Math.max(a.y, b.y); j++) carve(b.x, j);
+        let best = 0, bd = Infinity;
+        for (let c = 0; c < k; c++) {
+          const a = center(rs[c]), b = center(rs[k]);
+          const d = Math.hypot(a.x - b.x, a.y - b.y);
+          if (d < bd) { bd = d; best = c; }
+        }
+        carveCorridor(g, center(rs[best]), center(rs[k]));
+      }
+      // Câteva bucle în plus, ca să existe rute alternative.
+      for (let extra = 0; extra < 4; extra++) {
+        const i = rint(0, rs.length - 1), j = rint(0, rs.length - 1);
+        if (i === j) continue;
+        const a = center(rs[i]), b = center(rs[j]);
+        if (Math.hypot(a.x - b.x, a.y - b.y) < 40) carveCorridor(g, a, b);
+      }
+      let bi = 1, bd = -1;
+      const s0 = center(rs[0]);
+      for (let k = 1; k < rs.length; k++) {
+        const c = center(rs[k]);
+        const d = Math.hypot(c.x - s0.x, c.y - s0.y);
+        if (d > bd) { bd = d; bi = k; }
       }
       grid = g;
       rooms = rs;
+      bossIdx = bi;
       return;
     }
   }
@@ -682,19 +922,38 @@
     if (i < 0 || j < 0 || i >= TILE_W || j >= TILE_H) return false;
     return grid[j * TILE_W + i] === 0;
   }
-  function canStand(x, z, r) {
-    return isFloor(x + r, z) && isFloor(x - r, z) && isFloor(x, z + r) && isFloor(x, z - r) &&
-      isFloor(x + r * 0.7, z + r * 0.7) && isFloor(x - r * 0.7, z - r * 0.7) &&
-      isFloor(x + r * 0.7, z - r * 0.7) && isFloor(x - r * 0.7, z + r * 0.7);
+  function propBlocks(x, z, r) {
+    for (const p of rt.props) {
+      if (p.opened || !p.solid) continue;
+      const dx = p.x - x, dz = p.z - z;
+      if (dx * dx + dz * dz < (p.R + r) * (p.R + r)) return true;
+    }
+    return false;
   }
+  function canStand(x, z, r) {
+    if (!isFloor(x + r, z) || !isFloor(x - r, z) || !isFloor(x, z + r) || !isFloor(x, z - r)) return false;
+    const d = r * 0.7;
+    if (!isFloor(x + d, z + d) || !isFloor(x - d, z - d) || !isFloor(x + d, z - d) || !isFloor(x - d, z + d)) return false;
+    return !propBlocks(x, z, r);
+  }
+  /* Mișcare cu alunecare: pe fiecare axă separat, ca să alunece pe lângă ziduri. */
   function moveEntity(e, dx, dz, r) {
-    if (canStand(e.x + dx, e.z, r)) e.x += dx;
-    if (canStand(e.x, e.z + dz, r)) e.z += dz;
-    return Math.abs(dx) > 0 || Math.abs(dz) > 0;
+    const nx = e.x + dx, nz = e.z + dz;
+    let moved = false;
+    if (canStand(nx, e.z, r)) { e.x = nx; moved = true; }
+    if (canStand(e.x, nz, r)) { e.z = nz; moved = true; }
+    return moved;
+  }
+  /* Același lucru pentru jucător, care își păstrează coordonatele în px/pz. */
+  function movePlayer(dx, dz, r) {
+    const nx = rt.px + dx, nz = rt.pz + dz;
+    if (canStand(nx, rt.pz, r)) rt.px = nx;
+    if (canStand(rt.px, nz, r)) rt.pz = nz;
   }
 
   function buildMapMeshes(theme) {
     scene.remove(mapGroup);
+    mapGroup.traverse((o) => { if (o.isInstancedMesh) o.dispose(); });
     mapGroup = new THREE.Group();
     scene.add(mapGroup);
     const floorTiles = [], wallTiles = [];
@@ -710,99 +969,461 @@
       }
     }
     const dummy = new THREE.Object3D();
-    const fm = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.2, 1), new THREE.MeshStandardMaterial({ color: theme.floor, roughness: 0.95 }), floorTiles.length);
+    const fm = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(1, 0.2, 1),
+      new THREE.MeshStandardMaterial({ map: TEX.surface_plate, color: theme.floor, roughness: 0.95 }),
+      floorTiles.length
+    );
     floorTiles.forEach(([i, j], n) => { dummy.position.set(i + 0.5, -0.1, j + 0.5); dummy.updateMatrix(); fm.setMatrixAt(n, dummy.matrix); });
-    const wm = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1.6, 1), new THREE.MeshStandardMaterial({ color: theme.wall, roughness: 0.8, metalness: 0.05 }), wallTiles.length);
-    wallTiles.forEach(([i, j], n) => { dummy.position.set(i + 0.5, 0.8, j + 0.5); dummy.updateMatrix(); wm.setMatrixAt(n, dummy.matrix); });
-    fm.receiveShadow = false;
+    const wm = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(1, 1.35, 1),
+      new THREE.MeshStandardMaterial({ map: TEX.surface_wall, color: theme.wall, roughness: 0.85 }),
+      wallTiles.length
+    );
+    wallTiles.forEach(([i, j], n) => { dummy.position.set(i + 0.5, 0.675, j + 0.5); dummy.updateMatrix(); wm.setMatrixAt(n, dummy.matrix); });
     mapGroup.add(fm, wm);
     scene.fog.color.setHex(theme.fog);
     scene.background.setHex(theme.fog);
     sun.color.setHex(theme.light);
     ambient.color.setHex(theme.light);
+    torch.color.setHex(0xffa860);
   }
 
-  /* Model jucător */
-  let playerGroup = null;
-  function buildPlayerMesh() {
-    if (playerGroup) scene.remove(playerGroup);
-    const cls = CLASSES[state.cls];
-    const race = RACE_PLAYER[state.race];
-    const g = new THREE.Group();
-    const cloth = new THREE.MeshStandardMaterial({ color: cls.color, roughness: 0.5, metalness: 0.2, emissive: cls.color, emissiveIntensity: 0.08 });
-    const skin = new THREE.MeshStandardMaterial({ color: race.skin, roughness: 0.7 });
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.4, 0.95, 10), cloth);
-    body.position.y = 0.55;
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), skin);
-    head.position.y = 1.19;
-    g.add(body, head);
-    const wpnMat = new THREE.MeshStandardMaterial({ color: 0x9a8a6a, metalness: 0.6, roughness: 0.35 });
-    if (state.cls === "mage") {
-      const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 1.4, 6), wpnMat);
-      staff.position.set(0.42, 0.7, 0.1);
-      const orb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), new THREE.MeshBasicMaterial({ color: cls.color }));
-      orb.position.set(0.42, 1.45, 0.1);
-      g.add(staff, orb);
-    } else if (state.cls === "warrior") {
-      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.9, 0.04), new THREE.MeshStandardMaterial({ color: 0xdfe6f0, metalness: 0.9, roughness: 0.2 }));
-      blade.position.set(0.45, 0.8, 0.25);
-      blade.rotation.x = -0.3;
-      g.add(blade);
+  /* Obiecte de decor: lăzi, bariluri, cufere, coloane, cristale. */
+  function addProp(kind, x, z, opts = {}) {
+    const def = { crate: { R: 0.5, breakable: true }, barrel: { R: 0.45, breakable: true }, chest: { R: 0.5, chest: true }, column: { R: 0.55 }, crystal: { R: 0.5 } }[kind];
+    const ent = instantiate(kind);
+    ent.root.position.set(x, 0, z);
+    ent.root.rotation.y = Math.random() * Math.PI * 2;
+    scene.add(ent.root);
+    const p = { kind, x, z, R: def.R, solid: true, breakable: !!def.breakable, chest: !!def.chest, opened: false, ent, pop: 0 };
+    rt.props.push(p);
+    return p;
+  }
+  function clearProps() {
+    for (const p of rt.props) { scene.remove(p.ent.root); disposeEnt(p.ent); }
+    rt.props = [];
+  }
+  function spawnProps() {
+    clearProps();
+    rooms.forEach((room, idx) => {
+      if (idx === 0) return;
+      const cx = room.x + room.w / 2, cz = room.y + room.h / 2;
+      const okSpot = (x, z) => Math.abs(x - cx) > 1.6 && Math.abs(z - cz) > 1.6 && !propBlocks(x, z, 0.8);
+      const count = rint(2, 4);
+      for (let k = 0; k < count; k++) {
+        const x = rnd(room.x + 1.2, room.x + room.w - 1.2), z = rnd(room.y + 1.2, room.y + room.h - 1.2);
+        if (!okSpot(x, z)) continue;
+        addProp(Math.random() < 0.6 ? "crate" : "barrel", x, z);
+      }
+      if (Math.random() < 0.55) {
+        const x = rnd(room.x + 1.5, room.x + room.w - 1.5), z = rnd(room.y + 1.5, room.y + room.h - 1.5);
+        if (okSpot(x, z)) addProp("chest", x, z);
+      }
+      if (room.w >= 9 && room.h >= 9) {
+        for (const [ox, oz] of [[-2.5, -2.5], [2.5, -2.5], [-2.5, 2.5], [2.5, 2.5]]) {
+          const x = cx + ox, z = cz + oz;
+          if (isFloor(x, z)) addProp("column", x, z);
+        }
+      }
+      if (Math.random() < 0.3) {
+        const x = rnd(room.x + 1.2, room.x + room.w - 1.2), z = rnd(room.y + 1.2, room.y + room.h - 1.2);
+        if (okSpot(x, z)) addProp("crystal", x, z);
+      }
+    });
+  }
+
+  /* ============================================================
+     Runtime
+     ============================================================ */
+  const rt = {
+    px: 0, pz: 0, face: { x: 0, z: 1 }, player: null,
+    life: 1, mana: 1, time: 0, S: null, maxLife: 1, maxMana: 1, speed: 4.2, atkMul: 1,
+    cd: {}, cdMax: {}, basicCd: 0, buffUntil: 0, dashCd: 0, dashT: 0, dashVX: 0, dashVZ: 0, invuln: 0,
+    monsters: [], props: [], playerProj: [], enemyProj: [], ground: [], texts: [], pending: [],
+    portal: null, bossRoom: null, spawnRoom: null, kills: 0, started: false, dead: false,
+    hitStop: 0, shake: 0, combo: 0, comboT: 0, mapLevel: 1, mapName: "", camLook: new THREE.Vector3(),
+    hurtFlash: 0, castLock: 0, animsPlayer: null
+  };
+  const input = { mx: 0, mz: 0, keys: {} };
+
+  function gatherStats() {
+    const S = { life: 0, mana: 0, armor: 0, dmg: 0, crit: 5, speed: 0, atkSpeed: 0, resFire: 0, resCold: 0, resLight: 0, regen: 0, xpMul: 0, lifePct: 0 };
+    const add = (src) => { for (const k in src) S[k] = (S[k] || 0) + src[k]; };
+    add(CLASSES[state.cls].base);
+    add(RACE_PLAYER[state.race].bonus);
+    for (const id of state.alloc) add(TREE[id].stats);
+    for (const s of SLOTS) if (state.equip[s]) for (const a of state.equip[s].affixes) S[a.k] = (S[a.k] || 0) + a.v;
+    return S;
+  }
+
+  function recalc() {
+    const S = gatherStats();
+    rt.S = S;
+    rt.maxLife = Math.max(1, Math.round((S.life + state.level * 9) * (1 + S.lifePct / 100)));
+    rt.maxMana = Math.max(1, Math.round(S.mana + state.level * 3));
+    rt.speed = 4.2 * (1 + clamp(S.speed, -60, 200) / 100);
+    rt.atkMul = 1 + clamp(S.atkSpeed, -40, 200) / 100;
+    rt.life = clamp(rt.life, 0, rt.maxLife);
+    rt.mana = clamp(rt.mana, 0, rt.maxMana);
+  }
+
+  const xpNeeded = (level) => Math.floor(45 * Math.pow(level, 1.6));
+  const pointsAvailable = () => Math.max(0, state.level - 1 - (state.alloc.length - 1));
+
+  function msg(text, ms = 1700) {
+    const el = $("msg");
+    el.textContent = text;
+    el.classList.add("show");
+    clearTimeout(msg._t);
+    msg._t = setTimeout(() => el.classList.remove("show"), ms);
+  }
+  function comboBump() {
+    rt.combo++;
+    rt.comboT = 4;
+    const el = $("combo");
+    if (rt.combo >= 2) {
+      el.textContent = rt.combo + "× combo";
+      el.classList.add("show");
+      el.classList.remove("pop");
+      void el.offsetWidth;
+      el.classList.add("pop");
+      setTimeout(() => el.classList.remove("pop"), 160);
+    }
+  }
+  const comboBonus = () => 1 + Math.min(0.3, rt.combo * 0.02);
+
+  function gainXp(amount) {
+    const mul = 1 + (rt.S.xpMul || 0) / 100;
+    state.xp += amount * mul;
+    let leveled = false;
+    while (state.xp >= xpNeeded(state.level) && state.level < 60) {
+      state.xp -= xpNeeded(state.level);
+      state.level++;
+      leveled = true;
+    }
+    if (leveled) {
+      const oldMax = rt.maxLife;
+      recalc();
+      rt.life = Math.min(rt.maxLife, rt.life + (rt.maxLife - oldMax));
+      msg(`Nivelul ${state.level}! Ai un punct de pasiv.`, 2200);
+      sfx("level_up", 0.6);
+      burst(rt.px, 1, rt.pz, 0xffd34d, 26);
+      addRingEffect(rt.px, rt.pz, 2.6, 0xffd34d, 0.6);
+      save();
+    }
+  }
+
+  function addText(x, y, z, text, color, scale = 1) {
+    rt.texts.push({ x, y, z, text, color, life: 0.85, max: 0.85, scale });
+  }
+
+  /* ============================================================
+     Monștri
+     ============================================================ */
+  function spawnMonster(key, x, z, boss = false) {
+    const R = RACES_MON[key];
+    const lvl = rt.mapLevel;
+    const hpMax = Math.round(R.hp * (1 + 0.12 * (lvl - 1)) * (boss ? 8 : 1));
+    const ent = instantiate(R.model, R.tint ?? null);
+    const scaleK = R.size * (boss ? 1.7 : 1);
+    const Mdl = MODELS[R.model];
+    ent.body.scale.setScalar(Mdl.s * scaleK);
+    ent.body.position.y = -Mdl.minY * Mdl.s * scaleK;
+    ent.root.position.set(x, 0, z);
+    scene.add(ent.root);
+    const m = {
+      key, R, boss, x, z, hp: hpMax, maxHp: hpMax,
+      dmg: R.dmg * (1 + 0.08 * (lvl - 1)) * (boss ? 1.6 : 1),
+      speed: R.speed * (boss ? 0.85 : 1),
+      r: 0.42 * R.size * (boss ? 1.7 : 1),
+      h: MODEL_DEF[R.model] ? MODEL_DEF[R.model].h * scaleK : 1.5,
+      alive: true, aggro: boss, cd: rnd(0, 0.8), slowT: 0, stunT: 0,
+      pounceT: 0, pounceDur: 0, pdx: 0, pdz: 0, slamT: 3.5, slamWarn: false,
+      windup: 0, windupKind: null, reviveTimer: 0, revived: false, hurtT: 0, corpseT: 0, knockX: 0, knockZ: 0,
+      ent
+    };
+    rt.monsters.push(m);
+    playAct(ent, R.anims.idle);
+    return m;
+  }
+  function removeMonster(m) {
+    scene.remove(m.ent.root);
+    disposeEnt(m.ent);
+    m.removed = true;
+  }
+
+  function populateMap() {
+    rt.monsters.forEach(removeMonster);
+    rt.monsters = [];
+    const theme = THEMES[state.mapIndex % THEMES.length];
+    rooms.forEach((room, idx) => {
+      if (idx === 0) return;
+      const cx = room.x + room.w / 2, cz = room.y + room.h / 2;
+      if (idx === bossIdx) {
+        spawnMonster(theme.boss, cx, cz, true);
+        const extra = 3 + Math.floor(rt.mapLevel / 3);
+        for (let k = 0; k < extra; k++) {
+          const x = cx + rnd(-3, 3), z = cz + rnd(-3, 3);
+          if (isFloor(x, z) && !propBlocks(x, z, 0.5)) spawnMonster(pick(theme.pool), x, z);
+        }
+        return;
+      }
+      const n = rint(2, 3 + Math.floor(rt.mapLevel / 3));
+      for (let k = 0; k < n; k++) {
+        const x = rnd(room.x + 1, room.x + room.w - 1), z = rnd(room.z ?? room.y + 1, room.y + room.h - 1);
+        if (!canStand(x, z, 0.5)) continue;
+        if (Math.hypot(x - cx, z - cz) < 0.5 && Math.random() < 0.5) continue;
+        spawnMonster(pick(theme.pool), x, z);
+      }
+    });
+  }
+
+  function clearDynamic() {
+    rt.playerProj.forEach((p) => scene.remove(p.mesh));
+    rt.enemyProj.forEach((p) => scene.remove(p.mesh));
+    rt.ground.forEach((g) => scene.remove(g.mesh));
+    rt.playerProj = []; rt.enemyProj = []; rt.ground = []; rt.texts = []; rt.pending = [];
+    if (rt.portal) { scene.remove(rt.portal); rt.portal = null; }
+  }
+
+  function startMap(fresh = false) {
+    rt.mapLevel = state.mapIndex + 1;
+    const theme = THEMES[state.mapIndex % THEMES.length];
+    rt.mapName = theme.name;
+    generateGrid();
+    buildMapMeshes(theme);
+    clearDynamic();
+    const spawn = rooms[0];
+    rt.px = spawn.x + spawn.w / 2;
+    rt.pz = spawn.y + spawn.h / 2;
+    rt.spawnRoom = spawn;
+    rt.bossRoom = rooms[bossIdx];
+    rt.face = { x: 0, z: 1 };
+    spawnProps();
+    populateMap();
+    rt.kills = 0;
+    rt.cd = {};
+    rt.basicCd = 0;
+    rt.buffUntil = 0;
+    rt.dashT = 0;
+    rt.invuln = 0;
+    rt.combo = 0; rt.comboT = 0;
+    if (fresh) { rt.life = rt.maxLife; rt.mana = rt.maxMana; }
+    $("mapName").textContent = `Temnița ${rt.mapLevel}: ${theme.name}`;
+    msg(`${theme.name} — nivel ${rt.mapLevel}`, 2200);
+    updateCamera(true);
+    save();
+  }
+
+  function nextMap() {
+    state.mapIndex++;
+    state.potions = Math.min(8, state.potions + 1);
+    msg("Ai intrat în portalul următor. +1 poțiune.", 2000);
+    sfx("confirm", 0.6);
+    startMap(true);
+  }
+
+  /* ============================================================
+     Luptă
+     ============================================================ */
+  function hurtPlayer(raw, elem) {
+    if (rt.dead) return;
+    if (rt.invuln > 0) { addText(rt.px, 1.9, rt.pz, "Eschivat", "#7af0ff", 0.9); return; }
+    const S = rt.S;
+    let d = raw;
+    if (elem === "phys") {
+      const red = S.armor / (S.armor + 120 + 4 * rt.mapLevel);
+      d *= 1 - clamp(red, 0, 0.7);
     } else {
-      const bow = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.03, 6, 16, Math.PI), wpnMat);
-      bow.position.set(0.42, 0.9, 0.05);
-      bow.rotation.set(0, Math.PI / 2, Math.PI / 2);
-      g.add(bow);
+      const res = elem === "fire" ? S.resFire : elem === "cold" ? S.resCold : S.resLight;
+      d *= 1 - clamp(res, -100, 75) / 100;
     }
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.5, 24), new THREE.MeshBasicMaterial({ color: cls.color, transparent: true, opacity: 0.35, side: THREE.DoubleSide }));
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.02;
-    g.add(ring);
-    playerGroup = g;
-    scene.add(g);
+    d = Math.max(1, Math.round(d));
+    rt.life -= d;
+    rt.hurtFlash = 0.25;
+    rt.shake = Math.min(0.7, rt.shake + 0.25);
+    addText(rt.px, 1.9, rt.pz, "-" + d, "#ff6b6b", 1.1);
+    burst(rt.px, 1, rt.pz, 0xff3030, 10);
+    sfx("hurt", 0.5);
+    setFlash(rt.player, 0xff2020, 0.6);
+    rt.player.flashT = 0.25;
+    if (!rt.player.dead) playAct(rt.player, rt.animsPlayer.hit, { once: true, dur: 0.35, fade: 0.08 });
+    if (rt.life <= 0) {
+      rt.life = 0;
+      playerDied();
+    }
   }
 
-  /* Monștri */
-  function makeMonsterMesh(R, boss) {
-    let geo;
-    switch (R.shape) {
-      case "cone": geo = new THREE.ConeGeometry(0.45, 1.0, 6); geo.translate(0, 0.5, 0); break;
-      case "box": geo = new THREE.BoxGeometry(0.9, 1.3, 0.9); geo.translate(0, 0.65, 0); break;
-      case "thin": geo = new THREE.CylinderGeometry(0.22, 0.3, 1.5, 6); geo.translate(0, 0.75, 0); break;
-      case "diamond": geo = new THREE.OctahedronGeometry(0.6); geo.translate(0, 0.8, 0); break;
-      case "beast": geo = new THREE.BoxGeometry(1.2, 0.6, 0.6); geo.translate(0, 0.4, 0); break;
-      default: geo = new THREE.IcosahedronGeometry(0.6, 0); geo.translate(0, 0.7, 0); break;
+  function playerDied() {
+    if (rt.dead) return;
+    rt.dead = true;
+    rt.player.dead = true;
+    playAct(rt.player, rt.animsPlayer.death, { once: true, dur: 1.3 });
+    sfx("downed", 0.7);
+    setTimeout(() => {
+      $("deadScreen").hidden = false;
+      save();
+    }, 1200);
+  }
+
+  function rollHit(baseDmg) {
+    const S = rt.S;
+    let d = baseDmg * (1 + S.dmg / 100) * comboBonus();
+    if (rt.time < rt.buffUntil) d *= 1.35;
+    const crit = Math.random() * 100 < S.crit;
+    if (crit) d *= 1.5;
+    return { d, crit };
+  }
+
+  function damageMonster(m, base, elem, crit, slow = 0, stun = 0) {
+    if (!m.alive) return;
+    let d = base;
+    if (m.R.resist && m.R.resist[elem]) d *= 1 - m.R.resist[elem];
+    d = Math.max(1, Math.round(d));
+    m.hp -= d;
+    m.hurtT = 2.5;
+    if (slow) m.slowT = Math.max(m.slowT, slow);
+    if (stun) m.stunT = Math.max(m.stunT, stun);
+    addText(m.x, m.h + 0.2, m.z, String(d), crit ? "#ffd34d" : "#f4f1ea", crit ? 1.4 : 1);
+    burst(m.x, m.h * 0.5, m.z, elemColor[elem] || 0xffffff, crit ? 12 : 6);
+    setFlash(m.ent, 0xffffff, 0.8);
+    m.ent.flashT = 0.12;
+    if (m.alive && m.hp > 0 && !m.ent.oneShot) playAct(m.ent, m.R.anims.hit, { once: true, dur: 0.35, fade: 0.08 });
+    // Recul ușor.
+    const dx = m.x - rt.px, dz = m.z - rt.pz, L = Math.hypot(dx, dz) || 1;
+    m.knockX = (dx / L) * (crit ? 0.9 : 0.4);
+    m.knockZ = (dz / L) * (crit ? 0.9 : 0.4);
+    if (crit) { rt.hitStop = Math.max(rt.hitStop, 0.05); rt.shake = Math.min(0.6, rt.shake + 0.15); }
+    sfx("hit", crit ? 0.6 : 0.35);
+    if (m.hp <= 0) killMonster(m);
+  }
+
+  function killMonster(m) {
+    if (!m.alive) return;
+    m.alive = false;
+    m.hp = 0;
+    m.windup = 0;
+    rt.kills++;
+    comboBump();
+    burst(m.x, m.h * 0.5, m.z, m.R.tint ?? m.R.color ?? 0xffffff, 18);
+    sfx(m.boss ? "big_kill" : "kill", m.boss ? 0.8 : 0.5);
+    rt.hitStop = Math.max(rt.hitStop, m.boss ? 0.12 : 0.03);
+    if (m.boss) rt.shake = Math.min(0.8, rt.shake + 0.5);
+    if (m.R.explode) {
+      addRingEffect(m.x, m.z, m.R.explode.radius, 0xffb020, 0.4);
+      sfx("impact", 0.6);
+      const d = Math.hypot(rt.px - m.x, rt.pz - m.z);
+      if (d < m.R.explode.radius) hurtPlayer(m.R.explode.dmg * (1 + 0.08 * (rt.mapLevel - 1)), "fire");
     }
+    m.ent.dead = true;
+    if (m.R.revive && !m.revived) {
+      m.reviveTimer = 3.2;
+      playAct(m.ent, m.R.anims.death, { once: true, dur: 1.0 });
+    } else {
+      playAct(m.ent, m.R.anims.death, { once: true, dur: 1.0 });
+      m.corpseT = 2.2;
+    }
+    gainXp(m.R.xp * (m.boss ? 6 : 1) * (1 + 0.05 * (rt.mapLevel - 1)));
+    if (m.boss || Math.random() < 0.32) {
+      const ilvl = rt.mapLevel + (m.boss ? 2 : 0);
+      const rarity = m.boss ? (Math.random() < 0.5 ? "rare" : "magic") : undefined;
+      dropItem(m.x, m.z, makeItem(ilvl, rarity));
+    }
+    if (m.boss) msg(`${THEMES[state.mapIndex % THEMES.length].bossName} a căzut!`, 2600);
+  }
+
+  function dropItem(x, z, item) {
+    const hex = RARITY[item.rarity] ? new THREE.Color(rarityColor(item.rarity)).getHex() : 0xffffff;
     const grp = new THREE.Group();
-    const mat = new THREE.MeshStandardMaterial({ color: R.color, roughness: 0.6, metalness: 0.1, emissive: R.color, emissiveIntensity: R.shape === "ico" ? 0.35 : 0.06 });
-    const mesh = new THREE.Mesh(geo, mat);
-    grp.add(mesh);
-    const eyeMat = basicMat(boss ? 0xffd34d : 0xfff2b0);
-    const eyeGeo = new THREE.SphereGeometry(0.07, 6, 6);
-    const e1 = new THREE.Mesh(eyeGeo, eyeMat), e2 = new THREE.Mesh(eyeGeo, eyeMat);
-    const eyeY = R.shape === "beast" ? 0.5 : 1.0;
-    e1.position.set(0.14, eyeY, 0.3); e2.position.set(-0.14, eyeY, 0.3);
-    grp.add(e1, e2);
-    const s = R.scale * (boss ? 1.8 : 1);
-    grp.scale.setScalar(s);
-    return { grp, geo, mat };
+    const gem = new THREE.Mesh(groundGeo, new THREE.MeshBasicMaterial({ color: hex }));
+    gem.position.y = 0.5;
+    const beamMat = new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: item.rarity === "normal" ? 0.12 : 0.35, depthWrite: false });
+    const beam = new THREE.Mesh(beamGeo, beamMat);
+    beam.position.y = 1.6;
+    grp.add(gem, beam);
+    grp.position.set(x, 0, z);
+    scene.add(grp);
+    rt.ground.push({ x, z, item, mesh: grp, gem, t: Math.random() * 6 });
+    sfx("coin", 0.25);
   }
 
-  /* Efecte */
+  function breakProp(p) {
+    if (p.opened) return;
+    p.opened = true;
+    p.solid = false;
+    burst(p.x, 0.6, p.z, p.kind === "barrel" ? 0x8a5a2b : 0xa07040, 14);
+    sfx("impact", 0.4);
+    rt.shake = Math.min(0.5, rt.shake + 0.1);
+    playAct(p.ent, ["open", "Open"], { once: true, dur: 0.5 });
+    const roll = Math.random();
+    if (roll < 0.3) {
+      state.potions = Math.min(8, state.potions + 1);
+      addText(p.x, 1.2, p.z, "+1 poțiune", "#7dff9b", 0.9);
+    } else if (roll < 0.42) {
+      dropItem(p.x, p.z, makeItem(rt.mapLevel));
+    }
+    setTimeout(() => { if (!p.ent.root.parent) return; scene.remove(p.ent.root); disposeEnt(p.ent); }, 900);
+  }
+
+  function openChest(p) {
+    p.opened = true;
+    p.solid = false;
+    sfx("gem", 0.6);
+    burst(p.x, 1, p.z, 0xffd34d, 22);
+    addRingEffect(p.x, p.z, 1.8, 0xffd34d, 0.5);
+    playAct(p.ent, ["open", "Open"], { once: true, dur: 0.5 });
+    rt.shake = Math.min(0.5, rt.shake + 0.12);
+    dropItem(p.x + 0.3, p.z + 0.2, makeItem(rt.mapLevel + 1, "rare"));
+    dropItem(p.x - 0.3, p.z - 0.2, makeItem(rt.mapLevel + 1, Math.random() < 0.5 ? "magic" : undefined));
+    msg("Cufăr deschis!", 1200);
+  }
+
+  function aimAt(range) {
+    const m = nearestMonster(rt.px, rt.pz, range);
+    if (m) {
+      const dx = m.x - rt.px, dz = m.z - rt.pz, L = Math.hypot(dx, dz) || 1;
+      rt.face = { x: dx / L, z: dz / L };
+    }
+    return rt.face;
+  }
+  function nearestMonster(x, z, maxR) {
+    let best = null, bd = maxR * maxR;
+    for (const m of rt.monsters) {
+      if (!m.alive) continue;
+      const d2 = (m.x - x) ** 2 + (m.z - z) ** 2;
+      if (d2 < bd) { bd = d2; best = m; }
+    }
+    return best;
+  }
+
+  /* Proiectile și efecte */
+  const projGeo = new THREE.SphereGeometry(0.17, 8, 6);
+  const enemyProjGeo = new THREE.SphereGeometry(0.2, 8, 6);
+  const groundGeo = new THREE.OctahedronGeometry(0.22, 0);
+  const beamGeo = new THREE.CylinderGeometry(0.06, 0.06, 3.2, 6, 1, true);
+  const portalGeo = new THREE.TorusGeometry(1.1, 0.12, 12, 40);
+
+  function spawnPlayerProj(sk, dx, dz, dmgRaw, elem) {
+    const r = rollHit(dmgRaw);
+    const mesh = new THREE.Mesh(projGeo, basicMat(sk.color));
+    const sx = rt.px + dx * 0.7, sz = rt.pz + dz * 0.7;
+    mesh.position.set(sx, 1.0, sz);
+    mesh.scale.setScalar(sk.aoe ? 1.3 : 1);
+    scene.add(mesh);
+    rt.playerProj.push({ x: sx, z: sz, dx, dz, speed: sk.speed || 14, life: 1.4, dmg: r.d, crit: r.crit, elem, aoe: sk.aoe || 0, mesh, slow: sk.slow || 0, stun: sk.stun || 0, color: sk.color, trailT: 0 });
+    sfx("shoot", 0.25);
+  }
+
   const effects = [];
   function addRingEffect(x, z, radius, color, life = 0.35, sector = null) {
-    let geo;
-    if (sector) {
-      geo = new THREE.RingGeometry(0.05, 1, 24, 1, sector.start, sector.len);
-    } else {
-      geo = new THREE.RingGeometry(0.85, 1, 40);
-    }
+    const geo = sector ? new THREE.RingGeometry(0.05, 1, 24, 1, sector.start, sector.len) : new THREE.RingGeometry(0.85, 1, 40);
     geo.rotateX(-Math.PI / 2);
     const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(x, 0.05, z);
     scene.add(mesh);
-    effects.push({ kind: "ring", mesh, mat, geo, life, max: life, radius: radius, sector: !!sector });
+    effects.push({ kind: "ring", mesh, mat, geo, life, max: life, radius, sector: !!sector });
   }
   function addLineEffect(a, b, color) {
     const pts = [new THREE.Vector3(a.x, 0.9, a.z), new THREE.Vector3(b.x, 0.9, b.z)];
@@ -834,7 +1455,7 @@
   }
 
   /* Particule */
-  const MAX_P = 500;
+  const MAX_P = 600;
   const pPos = new Float32Array(MAX_P * 3);
   const pCol = new Float32Array(MAX_P * 3);
   const pVel = new Float32Array(MAX_P * 3);
@@ -853,7 +1474,7 @@
       const i = pNext; pNext = (pNext + 1) % MAX_P;
       pPos[i * 3] = x; pPos[i * 3 + 1] = y; pPos[i * 3 + 2] = z;
       const a = Math.random() * Math.PI * 2, sp = rnd(1.5, 4.5);
-      pVel[i * 3] = Math.cos(a) * sp; pVel[i * 3 + 1] = rnd(1.5, 4); pVel[i * 3 + 2] = Math.sin(a) * sp;
+      pVel[i * 3] = Math.cos(a) * sp; pVel[i * 3 + 1] = rnd(1.5, 4.5); pVel[i * 3 + 2] = Math.sin(a) * sp;
       pCol[i * 3] = tmpColor.r; pCol[i * 3 + 1] = tmpColor.g; pCol[i * 3 + 2] = tmpColor.b;
       pLife[i] = rnd(0.35, 0.7);
     }
@@ -873,279 +1494,8 @@
     pGeo.attributes.color.needsUpdate = true;
   }
 
-  /* Proiectile */
-  const projGeo = new THREE.SphereGeometry(0.17, 8, 6);
-  const enemyProjGeo = new THREE.SphereGeometry(0.2, 8, 6);
-  const groundGeo = new THREE.OctahedronGeometry(0.22, 0);
-  const portalGeo = new THREE.TorusGeometry(1.1, 0.12, 12, 40);
-
-  /* ============================================================
-     Runtime
-     ============================================================ */
-  const rt = {
-    px: 0, pz: 0, face: { x: 0, z: 1 }, life: 1, mana: 1, time: 0,
-    S: null, maxLife: 1, maxMana: 1, speed: 4.2, atkMul: 1,
-    cd: {}, basicCd: 0, buffUntil: 0, potCd: 0,
-    monsters: [], playerProj: [], enemyProj: [], ground: [], texts: [],
-    pending: [], portal: null, bossRoom: null, spawnRoom: null,
-    kills: 0, paused: true, dead: false, started: false, regenT: 0,
-    spawnTime: 0, hurtFlash: 0, mapLevel: 1, mapName: "", camLook: new THREE.Vector3()
-  };
-  const input = { mx: 0, mz: 0, keys: {} };
-
-  function gatherStats() {
-    const S = { life: 0, mana: 0, armor: 0, dmg: 0, crit: 5, speed: 0, atkSpeed: 0, resFire: 0, resCold: 0, resLight: 0, regen: 0, xpMul: 0, lifePct: 0 };
-    const add = (src) => { for (const k in src) S[k] = (S[k] || 0) + src[k]; };
-    const c = CLASSES[state.cls];
-    add(c.base);
-    add(RACE_PLAYER[state.race].bonus);
-    for (const id of state.alloc) add(TREE[id].stats);
-    for (const s of SLOTS) if (state.equip[s]) for (const a of state.equip[s].affixes) S[a.k] = (S[a.k] || 0) + a.v;
-    return S;
-  }
-
-  function recalc() {
-    const S = gatherStats();
-    rt.S = S;
-    rt.maxLife = Math.max(1, Math.round((S.life + state.level * 9) * (1 + S.lifePct / 100)));
-    rt.maxMana = Math.max(1, Math.round(S.mana + state.level * 3));
-    rt.speed = 4.2 * (1 + clamp(S.speed, -60, 200) / 100);
-    rt.atkMul = 1 + clamp(S.atkSpeed, -40, 200) / 100;
-    rt.life = clamp(rt.life, 0, rt.maxLife);
-    rt.mana = clamp(rt.mana, 0, rt.maxMana);
-  }
-
-  function xpNeeded(level) { return Math.floor(45 * Math.pow(level, 1.6)); }
-  function pointsAvailable() { return Math.max(0, state.level - 1 - (state.alloc.length - 1)); }
-
-  function msg(text, ms = 1700) {
-    const el = $("msg");
-    el.textContent = text;
-    el.classList.add("show");
-    clearTimeout(msg._t);
-    msg._t = setTimeout(() => el.classList.remove("show"), ms);
-  }
-
-  function gainXp(amount) {
-    const mul = 1 + (rt.S.xpMul || 0) / 100;
-    state.xp += amount * mul;
-    let leveled = false;
-    while (state.xp >= xpNeeded(state.level) && state.level < 60) {
-      state.xp -= xpNeeded(state.level);
-      state.level++;
-      leveled = true;
-    }
-    if (leveled) {
-      const oldMax = rt.maxLife;
-      recalc();
-      rt.life = Math.min(rt.maxLife, rt.life + (rt.maxLife - oldMax));
-      msg(`Nivelul ${state.level}! Ai un punct de pasiv.`);
-      save();
-    }
-  }
-
-  function addText(x, y, z, text, color, scale = 1) {
-    rt.texts.push({ x, y, z, text, color, life: 0.85, max: 0.85, scale });
-  }
-
-  /* Spawn */
-  function spawnMonster(key, x, z, boss = false) {
-    const R = RACES_MON[key];
-    const lvl = rt.mapLevel;
-    const hpMax = Math.round(R.hp * (1 + 0.12 * (lvl - 1)) * (boss ? 8 : 1));
-    const { grp, geo, mat } = makeMonsterMesh(R, boss);
-    grp.position.set(x, 0, z);
-    scene.add(grp);
-    const m = {
-      key, R, boss, x, z, hp: hpMax, maxHp: hpMax,
-      dmg: R.dmg * (1 + 0.08 * (lvl - 1)) * (boss ? 1.6 : 1),
-      speed: R.speed * (boss ? 0.85 : 1),
-      r: 0.45 * R.scale * (boss ? 1.8 : 1),
-      alive: true, aggro: boss, cd: rnd(0, 0.8), slowT: 0, stunT: 0,
-      pounceT: 0, pounceDur: 0, pdx: 0, pdz: 0, slamT: 3.5,
-      reviveTimer: 0, revived: false, hurtT: 0, mesh: grp, geo, mat
-    };
-    rt.monsters.push(m);
-    return m;
-  }
-
-  function populateMap() {
-    rt.monsters.forEach((m) => { scene.remove(m.mesh); m.geo.dispose(); });
-    rt.monsters = [];
-    const theme = THEMES[state.mapIndex % THEMES.length];
-    rooms.forEach((room, idx) => {
-      if (idx === 0) return;
-      const isBossRoom = idx === rooms.length - 1;
-      const cx = room.x + room.w / 2, cz = room.y + room.h / 2;
-      if (isBossRoom) {
-        spawnMonster(theme.boss, cx, cz, true);
-        const extra = 2 + Math.floor(rt.mapLevel / 3);
-        for (let k = 0; k < extra; k++) spawnMonster(pick(theme.pool), cx + rnd(-2, 2), cz + rnd(-2, 2));
-        return;
-      }
-      const n = rint(1, 2 + Math.floor(rt.mapLevel / 3));
-      for (let k = 0; k < n; k++) {
-        const x = rnd(room.x + 0.8, room.x + room.w - 0.8), z = rnd(room.y + 0.8, room.y + room.h - 0.8);
-        spawnMonster(pick(theme.pool), x, z);
-      }
-    });
-  }
-
-  function clearDynamic() {
-    rt.playerProj.forEach((p) => scene.remove(p.mesh));
-    rt.enemyProj.forEach((p) => scene.remove(p.mesh));
-    rt.ground.forEach((g) => scene.remove(g.mesh));
-    rt.playerProj = []; rt.enemyProj = []; rt.ground = []; rt.texts = []; rt.pending = [];
-    if (rt.portal) { scene.remove(rt.portal); rt.portal = null; }
-  }
-
-  function startMap(fresh = false) {
-    rt.mapLevel = state.mapIndex + 1;
-    const theme = THEMES[state.mapIndex % THEMES.length];
-    rt.mapName = theme.name;
-    generateGrid();
-    buildMapMeshes(theme);
-    clearDynamic();
-    const spawn = rooms[0];
-    rt.px = spawn.x + spawn.w / 2;
-    rt.pz = spawn.y + spawn.h / 2;
-    rt.spawnRoom = spawn;
-    rt.bossRoom = rooms[rooms.length - 1];
-    rt.face = { x: 0, z: 1 };
-    populateMap();
-    rt.kills = 0;
-    rt.cd = {};
-    rt.basicCd = 0;
-    rt.buffUntil = 0;
-    if (fresh) { rt.life = rt.maxLife; rt.mana = rt.maxMana; }
-    $("mapName").textContent = `Harta ${rt.mapLevel}: ${theme.name}`;
-    msg(`${theme.name} — nivel ${rt.mapLevel}`, 2200);
-    updateCamera(true);
-    save();
-  }
-
-  function nextMap() {
-    state.mapIndex++;
-    state.potions = Math.min(8, state.potions + 1);
-    msg("Ai intrat în portalul următor.");
-    startMap(true);
-  }
-
-  /* Combat */
-  function hurtPlayer(raw, elem) {
-    const S = rt.S;
-    let d = raw;
-    if (elem === "phys") {
-      const red = S.armor / (S.armor + 120 + 4 * rt.mapLevel);
-      d *= 1 - clamp(red, 0, 0.7);
-    } else {
-      const res = elem === "fire" ? S.resFire : elem === "cold" ? S.resCold : S.resLight;
-      d *= 1 - clamp(res, -100, 75) / 100;
-    }
-    d = Math.max(1, Math.round(d));
-    rt.life -= d;
-    rt.hurtFlash = 0.25;
-    addText(rt.px, 1.8, rt.pz, "-" + d, "#ff6b6b");
-    burst(rt.px, 1, rt.pz, 0xff3030, 8);
-    if (rt.life <= 0) {
-      rt.life = 0;
-      playerDied();
-    }
-  }
-
-  function playerDied() {
-    if (rt.dead) return;
-    rt.dead = true;
-    $("deadScreen").hidden = false;
-    save();
-  }
-
-  function rollHit(baseDmg) {
-    const S = rt.S;
-    let d = baseDmg * (1 + S.dmg / 100);
-    if (rt.time < rt.buffUntil) d *= 1.35;
-    const crit = Math.random() * 100 < S.crit;
-    if (crit) d *= 1.5;
-    return { d, crit };
-  }
-
-  function damageMonster(m, base, elem, crit, slow = 0, stun = 0) {
-    if (!m.alive) return;
-    let d = base;
-    if (m.R.resist && m.R.resist[elem]) d *= 1 - m.R.resist[elem];
-    d = Math.max(1, Math.round(d));
-    m.hp -= d;
-    m.hurtT = 2.5;
-    if (slow) m.slowT = Math.max(m.slowT, slow);
-    if (stun) m.stunT = Math.max(m.stunT, stun);
-    addText(m.x, 1.6 * m.mesh.scale.y, m.z, String(d), crit ? "#ffd34d" : "#f4f1ea", crit ? 1.35 : 1);
-    burst(m.x, 0.7, m.z, elemColor[elem] || 0xffffff, 6);
-    if (m.hp <= 0) killMonster(m);
-  }
-
-  function killMonster(m) {
-    if (!m.alive) return;
-    m.alive = false;
-    m.hp = 0;
-    rt.kills++;
-    burst(m.x, 0.8, m.z, m.R.color, 16);
-    if (m.R.explode) {
-      addRingEffect(m.x, m.z, m.R.explode.radius, 0xffb020, 0.4);
-      const d = Math.hypot(rt.px - m.x, rt.pz - m.z);
-      if (d < m.R.explode.radius) hurtPlayer(m.R.explode.dmg * (1 + 0.08 * (rt.mapLevel - 1)), "fire");
-    }
-    if (m.R.revive && !m.revived) {
-      m.reviveTimer = 3.0;
-      m.mesh.visible = false;
-    } else {
-      scene.remove(m.mesh);
-      m.geo.dispose();
-    }
-    gainXp(m.R.xp * (m.boss ? 6 : 1) * (1 + 0.05 * (rt.mapLevel - 1)));
-    if (m.boss || Math.random() < 0.32) {
-      const ilvl = rt.mapLevel + (m.boss ? 2 : 0);
-      const rarity = m.boss ? (Math.random() < 0.5 ? "rare" : "magic") : undefined;
-      dropItem(m.x, m.z, makeItem(ilvl, rarity));
-    }
-    if (m.boss) msg(`${THEMES[state.mapIndex % THEMES.length].bossName} a căzut!`, 2400);
-  }
-
-  function dropItem(x, z, item) {
-    const color = new THREE.Color(rarityColor(item.rarity));
-    const mesh = new THREE.Mesh(groundGeo, new THREE.MeshBasicMaterial({ color }));
-    mesh.position.set(x, 0.5, z);
-    scene.add(mesh);
-    rt.ground.push({ x, z, item, mesh, t: Math.random() * 6 });
-  }
-
-  function aimAt(range) {
-    const m = nearestMonster(rt.px, rt.pz, range);
-    if (m) {
-      const dx = m.x - rt.px, dz = m.z - rt.pz, L = Math.hypot(dx, dz) || 1;
-      rt.face = { x: dx / L, z: dz / L };
-    }
-    return rt.face;
-  }
-  function nearestMonster(x, z, maxR) {
-    let best = null, bd = maxR * maxR;
-    for (const m of rt.monsters) {
-      if (!m.alive) continue;
-      const d2 = (m.x - x) ** 2 + (m.z - z) ** 2;
-      if (d2 < bd) { bd = d2; best = m; }
-    }
-    return best;
-  }
-
-  function spawnPlayerProj(sk, dx, dz, dmgRaw, elem) {
-    const r = rollHit(dmgRaw);
-    const mesh = new THREE.Mesh(projGeo, basicMat(sk.color));
-    mesh.position.set(rt.px + dx * 0.6, 1.0, rt.pz + dz * 0.6);
-    mesh.scale.setScalar(sk.aoe ? 1.2 : 1);
-    scene.add(mesh);
-    rt.playerProj.push({ x: rt.px + dx * 0.6, z: rt.pz + dz * 0.6, dx, dz, speed: sk.speed || 14, life: 1.4, dmg: r.d, crit: r.crit, elem, aoe: sk.aoe || 0, mesh, slow: sk.slow || 0, stun: sk.stun || 0 });
-  }
-
-  function castAbility(sk, isBasic = false) {
+  /* Atacuri */
+  function castAbility(sk) {
     switch (sk.kind) {
       case "proj": {
         const a = aimAt(sk.range);
@@ -1166,6 +1516,7 @@
         if (!cur) { msg("Niciun monstru în raza de acțiune", 900); return false; }
         const hit = new Set();
         let from = { x: rt.px, z: rt.pz };
+        sfx("impact", 0.3);
         for (let j = 0; j < sk.jumps && cur; j++) {
           hit.add(cur);
           const r = rollHit(sk.dmg);
@@ -1184,34 +1535,36 @@
       }
       case "melee": {
         const face = rt.face;
-        addRingEffect(rt.px, rt.pz, sk.range, sk.color, 0.22, { start: -Math.atan2(face.z, face.x) - sk.arc / 2, len: sk.arc });
-        const hits = [];
+        const fa = Math.atan2(face.z, face.x);
+        addRingEffect(rt.px, rt.pz, sk.range, sk.color, 0.22, { start: -fa - sk.arc / 2, len: sk.arc });
+        sfx("shoot", 0.3);
         for (const m of rt.monsters) {
           if (!m.alive) continue;
           const dx = m.x - rt.px, dz = m.z - rt.pz;
-          const d = Math.hypot(dx, dz);
-          if (d > sk.range + m.r) continue;
+          if (Math.hypot(dx, dz) > sk.range + m.r) continue;
           const ang = Math.atan2(dz, dx);
-          const fa = Math.atan2(face.z, face.x);
-          let diff = Math.abs(((ang - fa + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
-          if (diff <= sk.arc / 2 + 0.2) hits.push(m);
+          const diff = Math.abs(((ang - fa + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+          if (diff <= sk.arc / 2 + 0.2) {
+            const r = rollHit(sk.dmg);
+            damageMonster(m, r.d, sk.elem, r.crit);
+          }
         }
-        for (const m of hits) {
-          const r = rollHit(sk.dmg);
-          damageMonster(m, r.d, sk.elem, r.crit);
+        for (const p of rt.props) {
+          if (p.breakable && !p.opened && Math.hypot(p.x - rt.px, p.z - rt.pz) < sk.range + p.R) breakProp(p);
         }
         break;
       }
       case "nova": {
         let cx = rt.px, cz = rt.pz;
         if (sk.atTarget) {
-          const t = nearestMonster(rt.px, rt.pz, 9) || null;
-          if (t) { cx = t.x; cz = t.z; }
-          else { cx = rt.px + rt.face.x * 3; cz = rt.pz + rt.face.z * 3; }
+          const t = nearestMonster(rt.px, rt.pz, 9);
+          if (t) { cx = t.x; cz = t.z; } else { cx = rt.px + rt.face.x * 3; cz = rt.pz + rt.face.z * 3; }
         }
         const fire = () => {
           addRingEffect(cx, cz, sk.radius, sk.color, 0.45);
-          burst(cx, 0.4, cz, sk.color, 14);
+          burst(cx, 0.4, cz, sk.color, 16);
+          sfx("impact", 0.5);
+          rt.shake = Math.min(0.5, rt.shake + 0.2);
           for (const m of rt.monsters) {
             if (!m.alive) continue;
             if (Math.hypot(m.x - cx, m.z - cz) <= sk.radius + m.r) {
@@ -1219,19 +1572,31 @@
               damageMonster(m, r.d, sk.elem, r.crit, sk.slow || 0, sk.stun || 0);
             }
           }
+          for (const p of rt.props) {
+            if (p.breakable && !p.opened && Math.hypot(p.x - cx, p.z - cz) < sk.radius) breakProp(p);
+          }
         };
-        if (sk.delay) rt.pending.push({ t: sk.delay, fn: fire, x: cx, z: cz, color: sk.color });
-        else fire();
+        if (sk.delay) {
+          addRingEffect(cx, cz, sk.radius, sk.color, sk.delay);
+          rt.pending.push({ t: sk.delay, fn: fire });
+        } else fire();
         break;
       }
       case "buff": {
         rt.buffUntil = rt.time + sk.duration;
         addRingEffect(rt.px, rt.pz, 2.4, sk.color, 0.5);
+        burst(rt.px, 1, rt.pz, sk.color, 18);
+        sfx("confirm", 0.6);
         msg("Strigăt de luptă: +35% daună", 1200);
         break;
       }
     }
     return true;
+  }
+
+  function playCast(sk) {
+    if (rt.player.dead) return;
+    playAct(rt.player, rt.animsPlayer.cast, { once: true, dur: 0.38, speed: 1.3, fade: 0.08 });
   }
 
   function useSkill(slot) {
@@ -1240,11 +1605,11 @@
     const sk = SKILLS[key];
     if ((rt.cd[key] || 0) > 0) return;
     if (rt.mana < sk.mana) { msg("Mană insuficientă", 900); return; }
+    playCast(sk);
     if (!castAbility(sk)) return;
     rt.mana -= sk.mana;
     const isBuff = sk.kind === "buff";
-    rt.cd[key] = (isBuff ? sk.cd : sk.cd / rt.atkMul);
-    rt.cdMax = rt.cdMax || {};
+    rt.cd[key] = isBuff ? sk.cd : sk.cd / rt.atkMul;
     rt.cdMax[key] = rt.cd[key];
   }
 
@@ -1255,18 +1620,57 @@
     state.potions--;
     const heal = Math.round(rt.maxLife * 0.35);
     rt.life = Math.min(rt.maxLife, rt.life + heal);
-    addText(rt.px, 1.9, rt.pz, "+" + heal, "#7dff9b");
-    burst(rt.px, 1, rt.pz, 0x7dff9b, 12);
+    addText(rt.px, 1.9, rt.pz, "+" + heal, "#7dff9b", 1.1);
+    burst(rt.px, 1, rt.pz, 0x7dff9b, 14);
+    sfx("gem", 0.5);
     save();
+  }
+
+  function startDash() {
+    if (rt.dead || !rt.started || rt.dashCd > 0 || rt.dashT > 0) return;
+    let mx = input.mx, mz = input.mz;
+    const kb = keyboardVector();
+    if (kb.x || kb.z) { mx = kb.x; mz = kb.z; }
+    let dx = mx, dz = mz;
+    const L = Math.hypot(dx, dz);
+    if (L < 0.15) { dx = rt.face.x; dz = rt.face.z; } else { dx /= L; dz /= L; }
+    rt.face = { x: dx, z: dz };
+    rt.dashT = 0.32;
+    rt.dashVX = dx * 11;
+    rt.dashVZ = dz * 11;
+    rt.invuln = 0.42;
+    rt.dashCd = 1.6;
+    playAct(rt.player, rt.animsPlayer.roll, { once: true, dur: 0.4, speed: 1.2, fade: 0.05 });
+    sfx("dash", 0.55);
+    burst(rt.px, 0.6, rt.pz, 0x7af0ff, 10);
   }
 
   /* Inamici */
   function fireEnemyProjectile(m, tx, tz) {
     const dx = tx - m.x, dz = tz - m.z, L = Math.hypot(dx, dz) || 1;
-    const mesh = new THREE.Mesh(enemyProjGeo, basicMat(0xff5a5a));
+    const mesh = new THREE.Mesh(enemyProjGeo, basicMat(m.R.tint ? 0xff3b8a : 0xff5a5a));
     mesh.position.set(m.x, 1.0, m.z);
     scene.add(mesh);
     rt.enemyProj.push({ x: m.x, z: m.z, dx: dx / L, dz: dz / L, speed: 8, life: 2.5, dmg: m.dmg, mesh });
+    sfx("shoot", 0.2);
+  }
+
+  function beginWindup(m, kind, t) {
+    m.windup = t;
+    m.windupKind = kind;
+    playAct(m.ent, kind === "ranged" ? (m.R.anims.cast || m.R.anims.attack) : m.R.anims.attack, { once: true, dur: t + 0.25, speed: 1 });
+  }
+
+  function performAttack(m) {
+    const dx = rt.px - m.x, dz = rt.pz - m.z;
+    const d = Math.hypot(dx, dz);
+    if (m.windupKind === "ranged") {
+      fireEnemyProjectile(m, rt.px, rt.pz);
+    } else if (d < m.R.range + 0.6) {
+      hurtPlayer(m.dmg, "phys");
+      burst(rt.px, 0.9, rt.pz, 0xff8080, 4);
+    }
+    m.cd = m.R.cd;
   }
 
   function updateMonster(m, dt) {
@@ -1274,32 +1678,55 @@
       m.reviveTimer -= dt;
       if (m.reviveTimer <= 0) {
         m.alive = true;
+        m.ent.dead = false;
         m.hp = Math.round(m.maxHp * 0.4);
         m.revived = true;
         m.aggro = true;
-        m.mesh.visible = true;
-        burst(m.x, 0.8, m.z, 0x9a9aff, 14);
+        playAct(m.ent, m.R.anims.idle);
+        burst(m.x, 0.8, m.z, 0x9a9aff, 16);
+        sfx("revive", 0.5);
       }
       return;
     }
     if (!m.alive) return;
     const R = m.R;
     m.cd -= dt; m.slowT -= dt; m.stunT -= dt; m.pounceT -= dt; m.hurtT -= dt;
-    m.mesh.position.set(m.x, 0, m.z);
+    // Recul
+    if (m.knockX || m.knockZ) {
+      moveEntity(m, m.knockX * dt * 6, m.knockZ * dt * 6, m.r * 0.9);
+      m.knockX *= 0.85; m.knockZ *= 0.85;
+      if (Math.abs(m.knockX) < 0.01) m.knockX = 0;
+      if (Math.abs(m.knockZ) < 0.01) m.knockZ = 0;
+    }
     const dx = rt.px - m.x, dz = rt.pz - m.z;
     const d = Math.hypot(dx, dz) || 0.001;
-    m.mesh.rotation.y = Math.atan2(dx, dz);
+    const face = Math.atan2(dx, dz);
+    m.ent.root.rotation.y = lerpAngle(m.ent.root.rotation.y, face, Math.min(1, dt * 10));
+    m.ent.root.position.set(m.x, 0, m.z);
     if (!m.aggro && d < R.aggro) m.aggro = true;
     if (!m.aggro || m.stunT > 0) return;
 
     if (m.boss) {
       m.slamT -= dt;
-      if (m.slamT <= 0 && d < 4.5) {
-        m.slamT = 4.2;
-        addRingEffect(m.x, m.z, 3, 0xffaa33, 0.5);
-        burst(m.x, 0.3, m.z, 0xffaa33, 18);
-        if (d < 3.2) hurtPlayer(m.dmg * 1.3, "phys");
+      if (m.slamT <= 1.0 && !m.slamWarn) {
+        m.slamWarn = true;
+        addRingEffect(m.x, m.z, 3, 0xff3030, 1.0);
       }
+      if (m.slamT <= 0) {
+        m.slamT = 4.2;
+        m.slamWarn = false;
+        addRingEffect(m.x, m.z, 3, 0xffaa33, 0.5);
+        burst(m.x, 0.3, m.z, 0xffaa33, 20);
+        sfx("impact", 0.7);
+        rt.shake = Math.min(0.8, rt.shake + 0.4);
+        if (Math.hypot(rt.px - m.x, rt.pz - m.z) < 3.2) hurtPlayer(m.dmg * 1.3, "phys");
+      }
+    }
+    if (m.windup > 0) {
+      m.windup -= dt;
+      setFlash(m.ent, 0xffb020, 0.55);
+      if (m.windup <= 0) { m.windup = 0; setFlash(m.ent, 0x000000, 0); performAttack(m); }
+      return;
     }
     if (m.pounceDur > 0) {
       m.pounceDur -= dt;
@@ -1311,18 +1738,29 @@
       m.pounceT = 3.5;
       m.pounceDur = 0.35;
       m.pdx = (dx / d) * 9; m.pdz = (dz / d) * 9;
+      playAct(m.ent, R.anims.walk, { speed: 2.2 });
       return;
     }
+    if (m.stunT > 0) return;
     const spd = m.speed * (m.slowT > 0 ? 0.5 : 1);
     if (R.ranged && d < R.range && d > 2.5) {
-      if (m.cd <= 0) { m.cd = R.cd; fireEnemyProjectile(m, rt.px, rt.pz); }
-    } else if (d > 1.3) {
+      if (m.cd <= 0) beginWindup(m, "ranged", 0.5);
+      else playAct(m.ent, R.anims.idle);
+    } else if (d > R.range) {
       moveEntity(m, (dx / d) * spd * dt, (dz / d) * spd * dt, m.r * 0.9);
-    } else if (m.cd <= 0) {
-      m.cd = R.cd;
-      hurtPlayer(m.dmg, "phys");
-      burst(rt.px, 0.9, rt.pz, 0xff8080, 4);
+      playAct(m.ent, R.anims.walk, { speed: clamp(spd / R.speed, 0.6, 1.5) });
+    } else if (d > 1.0) {
+      moveEntity(m, (dx / d) * spd * dt, (dz / d) * spd * dt, m.r * 0.9);
+      playAct(m.ent, R.anims.walk, { speed: clamp(spd / R.speed, 0.6, 1.5) });
+    } else {
+      playAct(m.ent, R.anims.idle);
+      if (m.cd <= 0) beginWindup(m, "melee", 0.4);
     }
+  }
+
+  function lerpAngle(a, b, t) {
+    let d = ((b - a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+    return a + d * t;
   }
 
   function updateEnemyProj(dt) {
@@ -1331,7 +1769,7 @@
       p.life -= dt;
       p.x += p.dx * p.speed * dt;
       p.z += p.dz * p.speed * dt;
-      p.mesh.position.set(p.x, 1.0, p.z);
+      p.mesh.position.set(p.x, 1.0 + Math.sin(p.life * 12) * 0.08, p.z);
       let remove = p.life <= 0 || !isFloor(p.x, p.z);
       if (!remove && Math.hypot(p.x - rt.px, p.z - rt.pz) < 0.5) {
         hurtPlayer(p.dmg, "fire");
@@ -1348,17 +1786,30 @@
       p.x += p.dx * p.speed * dt;
       p.z += p.dz * p.speed * dt;
       p.mesh.position.set(p.x, 1.0, p.z);
+      p.trailT -= dt;
+      if (p.trailT <= 0) { p.trailT = 0.03; burst(p.x, 1.0, p.z, p.color, 1); }
       let remove = p.life <= 0;
       if (!isFloor(p.x, p.z)) {
         remove = true;
-        burst(p.x, 0.8, p.z, elemColor[p.elem] || 0xffffff, 5);
+        burst(p.x, 0.8, p.z, elemColor[p.elem] || 0xffffff, 6);
+      }
+      if (!remove) {
+        for (const pr of rt.props) {
+          if (pr.breakable && !pr.opened && Math.hypot(pr.x - p.x, pr.z - p.z) < pr.R + 0.1) {
+            breakProp(pr);
+            remove = true;
+            break;
+          }
+        }
       }
       if (!remove) {
         for (const m of rt.monsters) {
           if (!m.alive) continue;
-          if (Math.hypot(m.x - p.x, m.z - p.z) < m.r + 0.2) {
+          if (Math.hypot(m.x - p.x, m.z - p.z) < m.r + 0.25) {
             if (p.aoe) {
               addRingEffect(p.x, p.z, p.aoe, elemColor[p.elem] || 0xffffff, 0.35);
+              burst(p.x, 0.8, p.z, elemColor[p.elem] || 0xffffff, 14);
+              sfx("impact", 0.45);
               for (const o of rt.monsters) {
                 if (!o.alive) continue;
                 if (Math.hypot(o.x - p.x, o.z - p.z) <= p.aoe + o.r) damageMonster(o, p.dmg, p.elem, p.crit, p.slow, p.stun);
@@ -1388,6 +1839,7 @@
      ============================================================ */
   const joy = { active: false, id: -1, ox: 0, oy: 0 };
   const joyEl = $("joy"), joyKnob = $("joyKnob");
+  const uiOpen = () => !$("panelTree").hidden || !$("panelInv").hidden || !$("deadScreen").hidden || !$("startScreen").hidden;
 
   window.addEventListener("pointerdown", (e) => {
     if (!rt.started || uiOpen()) return;
@@ -1421,12 +1873,14 @@
   window.addEventListener("pointercancel", endJoy);
 
   window.addEventListener("keydown", (e) => {
-    input.keys[e.key.toLowerCase()] = true;
+    const k = e.key.toLowerCase();
+    input.keys[k] = true;
     if (!rt.started || uiOpen()) return;
     if (e.key === "1") useSkill(0);
     if (e.key === "2") useSkill(1);
     if (e.key === "3") useSkill(2);
-    if (e.key.toLowerCase() === "q") usePotion();
+    if (k === "q") usePotion();
+    if (k === "r" || e.key === " ") { e.preventDefault(); startDash(); }
   });
   window.addEventListener("keyup", (e) => { input.keys[e.key.toLowerCase()] = false; });
   window.addEventListener("blur", () => { input.keys = {}; endJoy(); });
@@ -1441,21 +1895,12 @@
     return { x, z };
   }
 
-  document.querySelectorAll("[data-skill]").forEach((b) => {
-    b.addEventListener("click", () => useSkill(Number(b.dataset.skill)));
-  });
+  document.querySelectorAll("[data-skill]").forEach((b) => b.addEventListener("click", () => useSkill(Number(b.dataset.skill))));
   $("potBtn").addEventListener("click", usePotion);
+  $("dashBtn").addEventListener("click", startDash);
+  document.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => openPanel(b.dataset.open)));
+  document.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => closePanels()));
 
-  document.querySelectorAll("[data-open]").forEach((b) => {
-    b.addEventListener("click", () => openPanel(b.dataset.open));
-  });
-  document.querySelectorAll("[data-close]").forEach((b) => {
-    b.addEventListener("click", () => closePanels());
-  });
-
-  function uiOpen() {
-    return !$("panelTree").hidden || !$("panelInv").hidden || !$("deadScreen").hidden || !$("startScreen").hidden;
-  }
   function openPanel(name) {
     closePanels(true);
     if (name === "tree") { $("panelTree").hidden = false; renderTreeInfo(); resizeTree(); }
@@ -1467,17 +1912,26 @@
     if (!silent) save();
   }
 
-  /* Pornire */
-  function buildStartScreen() {
-    const rc = $("raceChoices"), cc = $("classChoices");
-    rc.innerHTML = Object.entries(RACE_PLAYER).map(([k, r]) =>
-      `<button class="choice" role="radio" aria-checked="${k === pendingRace}" data-race="${k}" type="button"><b>${r.name}</b><small>${r.desc}</small></button>`).join("");
-    cc.innerHTML = Object.entries(CLASSES).map(([k, c]) =>
-      `<button class="choice" role="radio" aria-checked="${k === pendingCls}" data-cls="${k}" type="button"><b>${c.name}</b><small>${c.desc}</small></button>`).join("");
-    rc.querySelectorAll("[data-race]").forEach((b) => b.addEventListener("click", () => { pendingRace = b.dataset.race; buildStartScreen(); }));
-    cc.querySelectorAll("[data-cls]").forEach((b) => b.addEventListener("click", () => { pendingCls = b.dataset.cls; buildStartScreen(); }));
-  }
+  /* Ecranul de start */
   let pendingRace = "om", pendingCls = "mage";
+  function buildStartScreen() {
+    $("raceChoices").innerHTML = Object.entries(RACE_PLAYER).map(([k, r]) =>
+      `<button class="choice" role="radio" aria-checked="${k === pendingRace}" data-race="${k}" type="button"><b>${r.name}</b><small>${r.desc}</small></button>`).join("");
+    $("classChoices").innerHTML = Object.entries(CLASSES).map(([k, c]) =>
+      `<button class="choice" role="radio" aria-checked="${k === pendingCls}" data-cls="${k}" type="button"><b>${c.name}</b><small>${c.desc}</small></button>`).join("");
+    $("raceChoices").querySelectorAll("[data-race]").forEach((b) => b.addEventListener("click", () => { pendingRace = b.dataset.race; buildStartScreen(); }));
+    $("classChoices").querySelectorAll("[data-cls]").forEach((b) => b.addEventListener("click", () => { pendingCls = b.dataset.cls; buildStartScreen(); }));
+  }
+
+  function buildPlayer() {
+    if (rt.player) { scene.remove(rt.player.root); disposeEnt(rt.player); }
+    const cls = CLASSES[state.cls];
+    rt.player = instantiate(cls.model, RACE_PLAYER[state.race].tint);
+    rt.player.root.position.set(rt.px, 0, rt.pz);
+    scene.add(rt.player.root);
+    rt.animsPlayer = cls.anims;
+    playAct(rt.player, cls.anims.idle);
+  }
 
   function beginGame(continueSave) {
     if (!continueSave) {
@@ -1489,19 +1943,20 @@
     rt.started = true;
     rt.dead = false;
     recalc();
-    buildPlayerMesh();
+    generateGrid();
+    rt.px = rooms[0].x + rooms[0].w / 2;
+    rt.pz = rooms[0].y + rooms[0].h / 2;
+    buildPlayer();
     rt.life = rt.maxLife;
     rt.mana = rt.maxMana;
     $("startScreen").hidden = true;
     $("hud").hidden = false;
-    updateSkillLabels();
+    CLASSES[state.cls].skills.forEach((k, i) => { $("sk" + i + "n").textContent = SKILLS[k].name; });
     startMap(true);
     save();
+    if (soundOn) music.play().catch(() => {});
     msg("Bine ai venit în Ruinele Umbrei", 2000);
-  }
-
-  function updateSkillLabels() {
-    CLASSES[state.cls].skills.forEach((k, i) => { $("sk" + i + "n").textContent = SKILLS[k].name; });
+    sfx("confirm", 0.5);
   }
 
   $("btnNew").addEventListener("click", () => beginGame(false));
@@ -1510,7 +1965,11 @@
   $("btnRespawn").addEventListener("click", () => {
     $("deadScreen").hidden = true;
     rt.dead = false;
+    rt.player.dead = false;
     recalc();
+    rt.life = rt.maxLife;
+    rt.mana = rt.maxMana;
+    playAct(rt.player, rt.animsPlayer.idle);
     startMap(true);
   });
 
@@ -1533,11 +1992,8 @@
     $("invGrid").innerHTML = cells;
     $("invCount").textContent = state.inv.length;
     const S = rt.S || gatherStats();
-    const keys = Object.keys(STAT_SHORT);
-    $("statBox").innerHTML = keys.map((k) => {
-      const v = S[k] || 0;
-      return `<div>${STAT_SHORT[k]}: <b>${Math.round(v * 10) / 10}</b></div>`;
-    }).join("") + `<div>Viață max: <b>${rt.maxLife}</b></div><div>Mană max: <b>${rt.maxMana}</b></div><div>Poțiuni: <b>${state.potions}</b></div>`;
+    $("statBox").innerHTML = Object.keys(STAT_SHORT).map((k) => `<div>${STAT_SHORT[k]}: <b>${Math.round((S[k] || 0) * 10) / 10}</b></div>`).join("")
+      + `<div>Viață max: <b>${rt.maxLife}</b></div><div>Mană max: <b>${rt.maxMana}</b></div><div>Poțiuni: <b>${state.potions}</b></div>`;
     showDetail();
   }
 
@@ -1575,6 +2031,7 @@
         state.equip[it.slot] = it;
         if (old) state.inv.push(old);
         msg(`Echipat: ${it.name}`, 1100);
+        sfx("confirm", 0.4);
       } else if (act.dataset.act === "unequip" && invSel.from === "eq") {
         if (state.inv.length >= 24) { msg("Rucsacul este plin", 1200); return; }
         const it = state.equip[invSel.slot];
@@ -1595,7 +2052,7 @@
      ============================================================ */
   const treeCanvas = $("treeCanvas");
   const tctx = treeCanvas.getContext("2d");
-  const view = { x: 0, y: 0, s: 0.85 };
+  const view = { x: 0, y: 0, s: 0.85, init: false };
   let treeW = 0, treeH = 0, treeDpr = 1;
   let selectedNode = null;
   const treePointers = new Map();
@@ -1610,10 +2067,15 @@
     if (!view.init) { view.x = treeW / 2; view.y = treeH / 2; view.init = true; }
     drawTree();
   }
-  window.addEventListener("resize", () => { sizeFx(); renderer.setSize(window.innerWidth, window.innerHeight); camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); if (!$("panelTree").hidden) resizeTree(); });
+  window.addEventListener("resize", () => {
+    sizeFx();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    if (!$("panelTree").hidden) resizeTree();
+  });
 
-  function nodeScreen(n) { return { x: view.x + n.x * view.s, y: view.y + n.y * view.s }; }
-
+  const nodeScreen = (n) => ({ x: view.x + n.x * view.s, y: view.y + n.y * view.s });
   function isAllocatable(n) {
     if (state.alloc.includes(n.id)) return false;
     return n.links.some((l) => state.alloc.includes(l));
@@ -1658,7 +2120,7 @@
       c.fillStyle = on ? "#d9b26f" : n.type === "keystone" ? "#3b2a52" : n.type === "notable" ? "#2a2236" : "#18141e";
       c.fill();
       c.lineWidth = avail ? 2.5 : 1.2;
-      c.strokeStyle = avail ? "#fff3c4" : on ? "#fff3c4" : "rgba(200,190,170,0.35)";
+      c.strokeStyle = avail || on ? "#fff3c4" : "rgba(200,190,170,0.35)";
       c.stroke();
       if (selectedNode === n.id) {
         c.beginPath(); c.arc(p.x, p.y, rad + 5, 0, Math.PI * 2);
@@ -1712,6 +2174,7 @@
       if (!on && isAllocatable(n) && pointsAvailable() > 0) {
         state.alloc.push(id);
         msg(`Pasiv ales: ${n.name}`, 1000);
+        sfx("confirm", 0.4);
       } else if (on && id !== 0 && canRemove(id)) {
         state.alloc = state.alloc.filter((x) => x !== id);
         msg(`Pasiv eliminat: ${n.name}`, 1000);
@@ -1726,7 +2189,7 @@
   treeCanvas.addEventListener("pointerdown", (e) => {
     treeCanvas.setPointerCapture(e.pointerId);
     treePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (treePointers.size === 1) gesture = { type: "pan", x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now(), moved: 0 };
+    if (treePointers.size === 1) gesture = { type: "pan", x: e.clientX, y: e.clientY, t: performance.now(), moved: 0 };
     if (treePointers.size === 2) {
       const [a, b] = [...treePointers.values()];
       gesture = { type: "pinch", d: Math.hypot(a.x - b.x, a.y - b.y), s: view.s };
@@ -1744,8 +2207,7 @@
     } else if (gesture && gesture.type === "pinch" && treePointers.size >= 2) {
       const [a, b] = [...treePointers.values()];
       const d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
-      const ns = clamp(gesture.s * (d / gesture.d), 0.35, 2.6);
-      view.s = ns;
+      view.s = clamp(gesture.s * (d / gesture.d), 0.35, 2.6);
       drawTree();
     }
   });
@@ -1771,16 +2233,18 @@
   }, { passive: false });
 
   /* ============================================================
-     Cameră, HUD, text și bare de viață
+     Cameră, HUD, text
      ============================================================ */
   const camTarget = new THREE.Vector3();
+  const shakeVec = new THREE.Vector3();
   function updateCamera(snap) {
     camTarget.set(rt.px, 0, rt.pz);
-    const offset = new THREE.Vector3(0, 13, 9.5);
-    const desired = camTarget.clone().add(offset);
+    const desired = camTarget.clone().add(new THREE.Vector3(0, 15.5, 9.5));
     if (snap) camera.position.copy(desired);
     else camera.position.lerp(desired, 0.12);
     rt.camLook.lerp(camTarget, snap ? 1 : 0.15);
+    shakeVec.set(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).multiplyScalar(rt.shake * 0.35);
+    camera.position.add(shakeVec);
     camera.lookAt(rt.camLook);
   }
 
@@ -1789,38 +2253,41 @@
     $("hpTxt").textContent = `${Math.ceil(rt.life)} / ${rt.maxLife}`;
     $("mpFill").style.width = (100 * rt.mana / rt.maxMana).toFixed(1) + "%";
     $("mpTxt").textContent = `${Math.floor(rt.mana)} / ${rt.maxMana}`;
-    const need = xpNeeded(state.level);
-    $("xpFill").style.width = (100 * state.xp / need).toFixed(1) + "%";
-    $("lvlTxt").textContent = `Nivelul ${state.level} · Monstri rămași: ${rt.monsters.filter((m) => m.alive || m.reviveTimer > 0).length}`;
+    $("xpFill").style.width = (100 * state.xp / xpNeeded(state.level)).toFixed(1) + "%";
+    const alive = rt.monsters.filter((m) => m.alive || m.reviveTimer > 0).length;
+    $("lvlTxt").textContent = `Nivelul ${state.level} · Monstri: ${alive}`;
     $("potCount").textContent = state.potions;
     CLASSES[state.cls].skills.forEach((k, i) => {
       const btn = $("sk" + i);
       const cdv = rt.cd[k] || 0;
-      const max = (rt.cdMax && rt.cdMax[k]) || SKILLS[k].cd;
+      const max = rt.cdMax[k] || SKILLS[k].cd;
       btn.querySelector(".cdv").style.setProperty("--cd", (cdv > 0 ? (cdv / max) * 100 : 0).toFixed(1) + "%");
       btn.style.opacity = rt.mana < SKILLS[k].mana ? "0.55" : "1";
     });
+    const dashPct = rt.dashCd > 0 ? (rt.dashCd / 1.6) * 100 : 0;
+    $("dashBtn").querySelector(".cdv").style.setProperty("--cd", dashPct.toFixed(1) + "%");
+    if (rt.comboT <= 0 && rt.combo > 0) { rt.combo = 0; $("combo").classList.remove("show"); }
   }
 
+  const v3 = new THREE.Vector3();
   function drawOverlay(dt) {
     const w = window.innerWidth, h = window.innerHeight;
     fx.clearRect(0, 0, w, h);
-    const v = new THREE.Vector3();
     const project = (x, y, z) => {
-      v.set(x, y, z).project(camera);
-      return { x: (v.x * 0.5 + 0.5) * w, y: (-v.y * 0.5 + 0.5) * h, z: v.z };
+      v3.set(x, y, z).project(camera);
+      return { x: (v3.x * 0.5 + 0.5) * w, y: (-v3.y * 0.5 + 0.5) * h, z: v3.z };
     };
     fx.textAlign = "center";
     fx.font = "600 13px Inter, sans-serif";
     for (const m of rt.monsters) {
       if (!m.alive || (m.hurtT <= 0 && !m.boss)) continue;
-      const p = project(m.x, 1.6 * m.mesh.scale.y, m.z);
+      const p = project(m.x, m.h + 0.5, m.z);
       if (p.z > 1) continue;
       const bw = m.boss ? 120 : 44;
       fx.fillStyle = "rgba(0,0,0,0.7)";
-      fx.fillRect(p.x - bw / 2, p.y - 14, bw, 5);
+      fx.fillRect(p.x - bw / 2, p.y - 6, bw, 5);
       fx.fillStyle = m.boss ? "#ffb14a" : "#d84545";
-      fx.fillRect(p.x - bw / 2, p.y - 14, bw * clamp(m.hp / m.maxHp, 0, 1), 5);
+      fx.fillRect(p.x - bw / 2, p.y - 6, bw * clamp(m.hp / m.maxHp, 0, 1), 5);
     }
     for (let i = rt.texts.length - 1; i >= 0; i--) {
       const t = rt.texts[i];
@@ -1844,49 +2311,96 @@
   let lastHudT = 0;
   let saveT = 0;
   let last = performance.now();
-  const clock = { t: 0 };
 
   function tick(now) {
     requestAnimationFrame(tick);
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
-    const active = rt.started && !rt.dead && !uiOpen();
+    if (!rt.started) return;
+
+    const active = !rt.dead && !uiOpen();
+    // Oprire scurtă la lovituri importante.
+    let gdt = dt;
+    if (rt.hitStop > 0) { gdt = dt * 0.15; }
+    rt.hitStop -= dt;
+
     if (active) {
-      rt.time += dt;
-      updatePlayer(dt);
-      rt.life = Math.min(rt.maxLife, rt.life + (rt.S.regen || 0) * dt);
-      rt.mana = Math.min(rt.maxMana, rt.mana + (3 + (rt.S.mana || 0) * 0.01) * dt);
-      autoAttack(dt);
-      for (const k in rt.cd) if (rt.cd[k] > 0) rt.cd[k] = Math.max(0, rt.cd[k] - dt);
-      rt.basicCd = Math.max(0, rt.basicCd - dt);
-      for (const m of rt.monsters) updateMonster(m, dt);
-      rt.monsters = rt.monsters.filter((m) => m.alive || m.reviveTimer > 0 || m.mesh.parent);
-      updatePlayerProj(dt);
-      updateEnemyProj(dt);
-      pendingUpdate(dt);
-      checkPickupsAndPortal(dt);
-      saveT += dt;
+      rt.time += gdt;
+      updatePlayer(gdt);
+      rt.life = Math.min(rt.maxLife, rt.life + (rt.S.regen || 0) * gdt);
+      rt.mana = Math.min(rt.maxMana, rt.mana + (3 + (rt.S.mana || 0) * 0.01) * gdt);
+      autoAttack(gdt);
+      for (const k in rt.cd) if (rt.cd[k] > 0) rt.cd[k] = Math.max(0, rt.cd[k] - gdt);
+      rt.basicCd = Math.max(0, rt.basicCd - gdt);
+      rt.dashCd = Math.max(0, rt.dashCd - gdt);
+      rt.invuln = Math.max(0, rt.invuln - gdt);
+      rt.comboT -= gdt;
+      for (const m of rt.monsters) updateMonster(m, gdt);
+      updatePlayerProj(gdt);
+      updateEnemyProj(gdt);
+      pendingUpdate(gdt);
+      checkPickupsAndPortal();
+      saveT += gdt;
       if (saveT > 20) { saveT = 0; save(); }
     }
-    if (rt.started) {
-      updateEffects(dt);
-      updateParticles(dt);
-      for (const g of rt.ground) { g.t += dt; g.mesh.rotation.y += dt * 2; g.mesh.position.y = 0.5 + Math.sin(g.t * 3) * 0.08; }
-      if (rt.portal) { rt.portal.rotation.z += dt * 0.8; }
-      if (playerGroup) {
-        playerGroup.position.set(rt.px, 0, rt.pz);
-        playerGroup.rotation.y = Math.atan2(rt.face.x, rt.face.z);
+    // Animațiile și corpurile rulează chiar și când jocul e pe pauză.
+    for (const m of rt.monsters) {
+      m.ent.mixer.update(gdt);
+      if (m.ent.flashT > 0) { m.ent.flashT -= dt; if (m.ent.flashT <= 0) m.ent.flashAmt = 0; }
+      if (m.ent.oneShot) { m.ent.oneShotT -= dt; if (m.ent.oneShotT <= 0 && !m.ent.dead) { m.ent.oneShot = false; } }
+      applyFlash(m.ent);
+      if (m.corpseT > 0) {
+        m.corpseT -= dt;
+        if (m.corpseT < 0.6) m.ent.root.scale.setScalar(clamp(m.corpseT / 0.6, 0.01, 1));
+        if (m.corpseT <= 0) removeMonster(m);
       }
-      updateCamera(false);
-      if (rt.hurtFlash > 0) rt.hurtFlash -= dt;
-      renderer.render(scene, camera);
-      drawOverlay(dt);
-      if (now - lastHudT > 80) { lastHudT = now; updateHud(); }
-      if (!$("panelTree").hidden && now % 500 < 20) drawTree();
     }
+    rt.monsters = rt.monsters.filter((m) => !m.removed);
+    for (const p of rt.props) {
+      if (p.ent.mixer) p.ent.mixer.update(dt);
+      if (p.pop > 0) { p.pop -= dt; }
+    }
+    rt.player.mixer.update(gdt);
+    if (rt.player.oneShot && !rt.player.dead) { rt.player.oneShotT -= dt; if (rt.player.oneShotT <= 0) rt.player.oneShot = false; }
+    if (rt.player.flashT > 0) { rt.player.flashT -= dt; if (rt.player.flashT <= 0) rt.player.flashAmt = 0; }
+    applyFlash(rt.player);
+    if (!rt.dead && !rt.player.oneShot && !uiOpen()) {
+      const kb = keyboardVector();
+      const mv = Math.hypot(input.mx + kb.x, input.mz + kb.z);
+      if (mv > 0.15 && rt.dashT <= 0) playAct(rt.player, rt.animsPlayer.walk, { speed: 1.15 });
+      else if (rt.dashT <= 0) playAct(rt.player, rt.animsPlayer.idle);
+    }
+
+    updateEffects(dt);
+    updateParticles(dt);
+    for (const g of rt.ground) {
+      g.t += dt;
+      g.gem.rotation.y += dt * 2;
+      g.gem.position.y = 0.5 + Math.sin(g.t * 3) * 0.08;
+    }
+    if (rt.portal) rt.portal.rotation.z += dt * 0.8;
+
+    rt.player.root.position.set(rt.px, 0, rt.pz);
+    rt.player.root.rotation.y = lerpAngle(rt.player.root.rotation.y, Math.atan2(rt.face.x, rt.face.z), Math.min(1, dt * 12));
+    torch.position.set(rt.px + 1.5, 2.6, rt.pz + 1.2);
+
+    updateCamera(false);
+    rt.shake *= Math.exp(-dt * 7);
+    if (rt.shake < 0.005) rt.shake = 0;
+    renderer.render(scene, camera);
+    drawOverlay(dt);
+    if (now - lastHudT > 80) { lastHudT = now; updateHud(); }
+    if (!$("panelTree").hidden && Math.floor(now / 400) !== Math.floor((now - 17) / 400)) drawTree();
   }
 
   function updatePlayer(dt) {
+    if (rt.dashT > 0) {
+      rt.dashT -= dt;
+      movePlayer(rt.dashVX * dt, rt.dashVZ * dt, 0.3);
+      if (Math.random() < 0.6) burst(rt.px, 0.4, rt.pz, 0x7af0ff, 1);
+      return;
+    }
+    if (rt.player.dead) return;
     let mx = input.mx, mz = input.mz;
     const kb = keyboardVector();
     if (kb.x || kb.z) { mx = kb.x; mz = kb.z; }
@@ -1895,39 +2409,43 @@
       const sp = rt.speed * Math.min(1, L) * dt;
       const nx = mx / Math.max(L, 1), nz = mz / Math.max(L, 1);
       rt.face = { x: nx, z: nz };
-      moveEntity({ get x() { return rt.px; }, set x(v) { rt.px = v; }, get z() { return rt.pz; }, set z(v) { rt.pz = v; } }, nx * sp, nz * sp, 0.3);
+      movePlayer(nx * sp, nz * sp, 0.3);
     }
   }
 
   function autoAttack(dt) {
-    if (rt.basicCd > 0) return;
+    if (rt.basicCd > 0 || rt.player.dead) return;
     const b = CLASSES[state.cls].basic;
     const target = nearestMonster(rt.px, rt.pz, b.range);
     if (!target) return;
     rt.basicCd = b.cd / rt.atkMul;
     const dx = target.x - rt.px, dz = target.z - rt.pz, L = Math.hypot(dx, dz) || 1;
     rt.face = { x: dx / L, z: dz / L };
-    castAbility(b, true);
+    playAct(rt.player, rt.animsPlayer.cast, { once: true, dur: 0.3, speed: 1.6, fade: 0.06 });
+    castAbility(b);
   }
 
-  function checkPickupsAndPortal(dt) {
+  function checkPickupsAndPortal() {
     for (let i = rt.ground.length - 1; i >= 0; i--) {
       const g = rt.ground[i];
       if (Math.hypot(g.x - rt.px, g.z - rt.pz) < 1.1) {
         if (state.inv.length < 24) {
           state.inv.push(g.item);
           msg(`Ai găsit: ${g.item.name}`, 1100);
+          sfx("gem", 0.4);
           save();
+          scene.remove(g.mesh);
+          rt.ground.splice(i, 1);
         } else {
           msg("Rucsacul este plin", 900);
-          continue;
         }
-        scene.remove(g.mesh);
-        rt.ground.splice(i, 1);
       }
     }
+    for (const p of rt.props) {
+      if (p.chest && !p.opened && Math.hypot(p.x - rt.px, p.z - rt.pz) < 1.2) openChest(p);
+    }
     const alive = rt.monsters.filter((m) => m.alive || m.reviveTimer > 0).length;
-    if (alive === 0 && !rt.portal) {
+    if (alive === 0 && !rt.portal && rt.started && rt.kills > 0) {
       const br = rt.bossRoom;
       const portal = new THREE.Mesh(portalGeo, new THREE.MeshBasicMaterial({ color: 0x7af0ff }));
       portal.rotation.x = Math.PI / 2;
@@ -1935,18 +2453,17 @@
       scene.add(portal);
       rt.portal = portal;
       msg("Portalul s-a deschis!", 2000);
+      sfx("confirm", 0.6);
     }
     if (rt.portal) {
-      const dx = rt.portal.position.x - rt.px, dz = rt.portal.position.z - rt.pz;
-      if (Math.hypot(dx, dz) < 1.2) nextMap();
+      if (Math.hypot(rt.portal.position.x - rt.px, rt.portal.position.z - rt.pz) < 1.2) nextMap();
     }
   }
 
   /* ============================================================
      Inițializare
      ============================================================ */
-  window.addEventListener("resize", () => {});
-  window.addEventListener("visibilitychange", () => { if (document.hidden) save(); });
+  window.addEventListener("visibilitychange", () => { if (document.hidden) { save(); music.pause(); } else if (rt.started && soundOn) music.play().catch(() => {}); });
 
   const hadSave = hasSave() && load();
   $("btnContinue").hidden = !hadSave;
@@ -1955,11 +2472,20 @@
     : "Jocul se salvează automat pe acest dispozitiv.";
   if (hadSave) { pendingRace = state.race; pendingCls = state.cls; }
   buildStartScreen();
-  generateGrid();
-  buildMapMeshes(THEMES[0]);
+  refreshSoundBtn();
   requestAnimationFrame(tick);
 
-  window.__ruine = { rt, state, TREE, SKILLS, CLASSES, beginGame, useSkill, usePotion, openPanel, closePanels, spawnMonster, killMonster, nextMap, hurtPlayer, makeItem, dropItem, treeView: () => ({ view, treeCanvas }) };
+  loadAssets(assetProgress).then(() => {
+    $("loadTxt").textContent = "Gata. Alege-ți eroul.";
+    $("loadBar").hidden = true;
+    $("btnNew").disabled = false;
+    $("btnContinue").disabled = false;
+  }).catch((err) => {
+    $("loadTxt").textContent = "Nu s-au putut încărca modelele: " + (err && err.message ? err.message : "eroare") + ". Reîncarcă pagina.";
+    $("loadTxt").style.color = "#ff8a8a";
+  });
+
+  window.__ruine = { rt, state, TREE, SKILLS, CLASSES, MODELS, beginGame, useSkill, usePotion, startDash, openPanel, closePanels, spawnMonster, killMonster, nextMap, hurtPlayer, makeItem, dropItem, breakProp, treeView: () => ({ view, treeCanvas }) };
 </script>
 </body>
 </html>

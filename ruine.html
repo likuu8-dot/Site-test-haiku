@@ -829,7 +829,7 @@
   };
 
   /* Instanță de model: clonare cu schelet, materiale proprii și mixer de animații. */
-  function instantiate(key, tint = null) {
+  function instantiate(key, tint = null, tintAmt = 0.35) {
     const M = MODELS[key];
     const root = new THREE.Group();
     const body = SkeletonUtils.clone(M.scene);
@@ -846,7 +846,10 @@
     const actions = {};
     for (const clip of M.animations) actions[clip.name.split("|").pop()] = mixer.clipAction(clip);
     const baseEm = new THREE.Color(tint == null ? 0x000000 : tint);
-    if (tint != null) for (const m of mats) if (m.emissive) m.emissive.copy(baseEm).multiplyScalar(0.35);
+    if (tint != null) {
+      baseEm.multiplyScalar(tintAmt);
+      for (const m of mats) if (m.emissive) m.emissive.copy(baseEm);
+    }
     return { root, body, mixer, actions, mats, baseEm, current: null, oneShot: false, oneShotT: 0, dead: false, flashT: 0, flashCol: new THREE.Color(), flashAmt: 0 };
   }
   function findAct(ent, names) {
@@ -888,6 +891,8 @@
   function disposeEnt(ent) {
     ent.mixer.stopAllAction();
     for (const m of ent.mats) m.dispose();
+    // Fiecare clonă are scheletele ei, cu câte o textură de oase pe GPU; fără asta, memoria creștea la fiecare temniță.
+    ent.body.traverse((o) => { if (o.isSkinnedMesh && o.skeleton) o.skeleton.dispose(); });
   }
 
   /* ============================================================
@@ -1033,8 +1038,9 @@
       geo.computeBoundingSphere();
       return geo;
     };
-    const fm = new THREE.Mesh(makeGeo(floor), new THREE.MeshStandardMaterial({ map: TEX.surface_plate, color: theme.floor, roughness: 0.95 }));
-    const wm = new THREE.Mesh(makeGeo(wall), new THREE.MeshStandardMaterial({ map: TEX.surface_wall, color: theme.wall, roughness: 0.85 }));
+    // Lambert în loc de Standard: podeaua și pereții acoperă aproape tot ecranul, iar umbrirea PBR costa mult pe telefon.
+    const fm = new THREE.Mesh(makeGeo(floor), new THREE.MeshLambertMaterial({ map: TEX.surface_plate, color: theme.floor }));
+    const wm = new THREE.Mesh(makeGeo(wall), new THREE.MeshLambertMaterial({ map: TEX.surface_wall, color: theme.wall }));
     mapGroup.add(fm, wm);
     scene.fog.color.setHex(theme.fog);
     scene.background.setHex(theme.fog);
@@ -1050,6 +1056,9 @@
     ent.root.position.set(x, 0, z);
     ent.root.rotation.y = Math.random() * Math.PI * 2;
     scene.add(ent.root);
+    // Decorul stă pe loc: matricele se calculează o dată, nu în fiecare cadru. Se reactivează când obiectul se sparge.
+    ent.root.updateMatrixWorld(true);
+    ent.root.matrixWorldAutoUpdate = false;
     const p = { kind, x, z, R: def.R, solid: true, breakable: !!def.breakable, chest: !!def.chest, opened: false, ent, pop: 0 };
     rt.props.push(p);
     return p;
@@ -1413,6 +1422,7 @@
     if (p.opened) return;
     p.opened = true;
     p.solid = false;
+    p.ent.root.matrixWorldAutoUpdate = true;
     burst(p.x, 0.6, p.z, p.kind === "barrel" ? 0x8a5a2b : 0xa07040, 14);
     sfx("impact", 0.4);
     rt.shake = Math.min(0.5, rt.shake + 0.1);
@@ -1430,6 +1440,7 @@
   function openChest(p) {
     p.opened = true;
     p.solid = false;
+    p.ent.root.matrixWorldAutoUpdate = true;
     sfx("gem", 0.6);
     burst(p.x, 1, p.z, 0xffd34d, 22);
     addRingEffect(p.x, p.z, 1.8, 0xffd34d, 0.5);
@@ -1987,7 +1998,8 @@
   function buildPlayer() {
     if (rt.player) { scene.remove(rt.player.root); disposeEnt(rt.player); }
     const cls = CLASSES[state.cls];
-    rt.player = instantiate(cls.model, RACE_PLAYER[state.race].tint);
+    // Tenta rasei e slabă: la 35% acoperea culorile modelului și eroul apărea ca o siluetă plată.
+    rt.player = instantiate(cls.model, RACE_PLAYER[state.race].tint, 0.06);
     rt.player.root.position.set(rt.px, 0, rt.pz);
     scene.add(rt.player.root);
     rt.animsPlayer = cls.anims;
@@ -2128,7 +2140,12 @@
     if (!view.init) { view.x = treeW / 2; view.y = treeH / 2; view.init = true; }
     drawTree();
   }
+  /* Pe telefon, evenimentul resize vine des (bara browserului, panourile aplicației). Redimensionarea
+     canvas-ului îl golește și se vede ca o clipire, deci o facem doar când dimensiunea chiar s-a schimbat. */
+  let lastW = window.innerWidth, lastH = window.innerHeight;
   window.addEventListener("resize", () => {
+    if (window.innerWidth === lastW && window.innerHeight === lastH) return;
+    lastW = window.innerWidth; lastH = window.innerHeight;
     sizeFx();
     applyRenderScale();
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -2298,12 +2315,16 @@
      ============================================================ */
   const camTarget = new THREE.Vector3();
   const shakeVec = new THREE.Vector3();
-  function updateCamera(snap) {
+  const camOffset = new THREE.Vector3(0, 15.5, 9.5);
+  const camDesired = new THREE.Vector3();
+  /* Urmărirea camerei depinde de timp, nu de numărul de cadre. Înainte, un procent fix pe cadru făcea
+     ca la FPS mic camera să rămână mult în urma eroului și mișcarea să pară grea. */
+  function updateCamera(snap, dt = 1 / 60) {
     camTarget.set(rt.px, 0, rt.pz);
-    const desired = camTarget.clone().add(new THREE.Vector3(0, 15.5, 9.5));
-    if (snap) camera.position.copy(desired);
-    else camera.position.lerp(desired, 0.12);
-    rt.camLook.lerp(camTarget, snap ? 1 : 0.15);
+    camDesired.copy(camTarget).add(camOffset);
+    if (snap) camera.position.copy(camDesired);
+    else camera.position.lerp(camDesired, 1 - Math.exp(-dt * 7.7));
+    rt.camLook.lerp(camTarget, snap ? 1 : 1 - Math.exp(-dt * 9.8));
     shakeVec.set(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).multiplyScalar(rt.shake * 0.35);
     camera.position.add(shakeVec);
     camera.lookAt(rt.camLook);
@@ -2369,19 +2390,47 @@
   /* ============================================================
      Buclă principală
      ============================================================ */
-  /* Scalare dinamică: dacă media cadrelor depășește ~33 fps, randăm la o rezoluție mai mică;
-     când e loc, revenim treptat. Măsurătoarea se face pe ferestre de 1.5 s. */
-  const perfWin = { t: 0, n: 0 };
+  /* Scalare dinamică, doar în jos: dacă media cadrelor e sub ~33 fps, rezoluția scade cu un pas.
+     Nu mai urcă la loc, pentru că fiecare schimbare redimensionează canvas-ul și se vede ca o clipire;
+     varianta anterioară putea oscila sus-jos la fiecare 1.5 s. Primele 3 s sunt ignorate (încărcare). */
+  const perfWin = { t: 0, n: 0, warm: 3 };
   function adaptRenderScale(dt) {
+    if (perfWin.warm > 0) { perfWin.warm -= dt; return; }
     perfWin.t += dt; perfWin.n++;
-    if (perfWin.t < 1.5) return;
+    if (perfWin.t < 2) return;
     const avg = perfWin.t / perfWin.n;
     perfWin.t = 0; perfWin.n = 0;
-    let next = renderScale;
-    if (avg > 0.03 && renderScale > 0.5) next = Math.max(0.5, +(renderScale - 0.1).toFixed(2));
-    else if (avg < 0.0165 && renderScale < 1) next = Math.min(1, +(renderScale + 0.05).toFixed(2));
-    if (next !== renderScale) { renderScale = next; applyRenderScale(); }
+    if (avg > 0.03 && renderScale > 0.6) {
+      renderScale = Math.max(0.6, +(renderScale - 0.2).toFixed(2));
+      applyRenderScale();
+      perfWin.warm = 1; // lasă un moment să se stabilizeze după redimensionare
+    }
   }
+
+  /* Simularea jocului, rulată în pași mici; vezi tick(). */
+  function simulate(gdt) {
+    rt.time += gdt;
+    updatePlayer(gdt);
+    rt.life = Math.min(rt.maxLife, rt.life + (rt.S.regen || 0) * gdt);
+    rt.mana = Math.min(rt.maxMana, rt.mana + (3 + (rt.S.mana || 0) * 0.01) * gdt);
+    autoAttack(gdt);
+    for (const k in rt.cd) if (rt.cd[k] > 0) rt.cd[k] = Math.max(0, rt.cd[k] - gdt);
+    rt.basicCd = Math.max(0, rt.basicCd - gdt);
+    rt.dashCd = Math.max(0, rt.dashCd - gdt);
+    rt.invuln = Math.max(0, rt.invuln - gdt);
+    rt.comboT -= gdt;
+    for (const m of rt.monsters) updateMonster(m, gdt);
+    updatePlayerProj(gdt);
+    updateEnemyProj(gdt);
+    pendingUpdate(gdt);
+    checkPickupsAndPortal();
+    saveT += gdt;
+    if (saveT > 20) { saveT = 0; save(); }
+  }
+
+  // Monștrii mai departe de atât nu sunt pe ecran: nu le animăm oasele și nu le recalculăm matricele.
+  // 28 acoperă colțurile ecranului și pe ecrane late în landscape (~24 unități), cu marjă.
+  const FAR2 = 28 * 28;
 
   let lastHudT = 0;
   let saveT = 0;
@@ -2389,7 +2438,8 @@
 
   function tick(now) {
     requestAnimationFrame(tick);
-    const dt = Math.min(0.05, (now - last) / 1000);
+    // Până la 0.1 s pe cadru: la FPS mic jocul nu mai intră în slow-motion (simularea rulează în sub-pași).
+    const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     if (!rt.started) return;
 
@@ -2400,27 +2450,20 @@
     rt.hitStop -= dt;
 
     if (active) {
-      rt.time += gdt;
-      updatePlayer(gdt);
-      rt.life = Math.min(rt.maxLife, rt.life + (rt.S.regen || 0) * gdt);
-      rt.mana = Math.min(rt.maxMana, rt.mana + (3 + (rt.S.mana || 0) * 0.01) * gdt);
-      autoAttack(gdt);
-      for (const k in rt.cd) if (rt.cd[k] > 0) rt.cd[k] = Math.max(0, rt.cd[k] - gdt);
-      rt.basicCd = Math.max(0, rt.basicCd - gdt);
-      rt.dashCd = Math.max(0, rt.dashCd - gdt);
-      rt.invuln = Math.max(0, rt.invuln - gdt);
-      rt.comboT -= gdt;
-      for (const m of rt.monsters) updateMonster(m, gdt);
-      updatePlayerProj(gdt);
-      updateEnemyProj(gdt);
-      pendingUpdate(gdt);
-      checkPickupsAndPortal();
-      saveT += gdt;
-      if (saveT > 20) { saveT = 0; save(); }
+      // Pași de cel mult ~1/30 s, ca rostogolirea și proiectilele să nu sară prin pereți la FPS mic.
+      const steps = Math.max(1, Math.ceil(gdt / 0.034));
+      const sdt = gdt / steps;
+      for (let s = 0; s < steps && !rt.dead; s++) simulate(sdt);
     }
     // Animațiile și corpurile rulează chiar și când jocul e pe pauză.
     for (const m of rt.monsters) {
-      m.ent.mixer.update(gdt);
+      const far = (m.x - rt.px) ** 2 + (m.z - rt.pz) ** 2 > FAR2;
+      if (far !== !!m.far) {
+        m.far = far;
+        m.ent.root.visible = !far;
+        m.ent.root.matrixWorldAutoUpdate = !far;
+      }
+      if (!far) m.ent.mixer.update(gdt);
       if (m.ent.flashT > 0) { m.ent.flashT -= dt; if (m.ent.flashT <= 0) m.ent.flashAmt = 0; }
       if (m.ent.oneShot) { m.ent.oneShotT -= dt; if (m.ent.oneShotT <= 0 && !m.ent.dead) { m.ent.oneShot = false; } }
       applyFlash(m.ent);
@@ -2432,7 +2475,8 @@
     }
     rt.monsters = rt.monsters.filter((m) => !m.removed);
     for (const p of rt.props) {
-      if (p.ent.mixer) p.ent.mixer.update(dt);
+      // Decorul se animă doar când e spart sau deschis.
+      if (p.opened) p.ent.mixer.update(dt);
       if (p.pop > 0) { p.pop -= dt; }
     }
     rt.player.mixer.update(gdt);
@@ -2459,7 +2503,7 @@
     rt.player.root.rotation.y = lerpAngle(rt.player.root.rotation.y, Math.atan2(rt.face.x, rt.face.z), Math.min(1, dt * 12));
     torch.position.set(rt.px + 1.5, 2.6, rt.pz + 1.2);
 
-    updateCamera(false);
+    updateCamera(false, dt);
     rt.shake *= Math.exp(-dt * 7);
     if (rt.shake < 0.005) rt.shake = 0;
     // Panourile și ecranul de moarte acoperă complet scena: nu o mai randăm sub ele.

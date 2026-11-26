@@ -27,8 +27,8 @@
     background: var(--bg);
     color: var(--fg);
     font-family: var(--font-body);
-    font-size: 1rem;
-    line-height: 1.7;
+    font-size: 0.975rem;
+    line-height: 1.65;
     padding-left: max(16px, env(safe-area-inset-left, 0px));
     padding-right: max(16px, env(safe-area-inset-right, 0px));
     -webkit-font-smoothing: antialiased;
@@ -124,7 +124,7 @@
   }
   .hero .label { margin-bottom: 1.2rem; animation: rise 1.2s ease both; }
   .name {
-    font-size: clamp(5.5rem, 30vw, 15rem);
+    font-size: clamp(4.5rem, 21vw, 10.5rem);
     line-height: 0.85;
     font-weight: 300;
     letter-spacing: -0.02em;
@@ -159,6 +159,20 @@
   }
   .cta:hover { background: var(--accent); color: var(--bg); }
 
+  .hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    margin-top: 3rem;
+    padding-top: 1.1rem;
+    border-top: 1px solid var(--line);
+    font-size: 0.7rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    animation: rise 1.6s 0.6s ease both;
+  }
+
   @keyframes rise {
     from { opacity: 0; transform: translateY(14px); }
     to { opacity: 1; transform: none; }
@@ -175,7 +189,7 @@
     padding-top: 1.2rem;
     margin-bottom: 3rem;
   }
-  .section-head h2 { font-size: clamp(2.2rem, 6vw, 3.4rem); }
+  .section-head h2 { font-size: clamp(1.9rem, 4.5vw, 2.6rem); }
 
   /* About */
   .about {
@@ -259,20 +273,8 @@
     aspect-ratio: 16 / 9;
     max-width: 100%;
     margin-bottom: 1.4rem;
-    background:
-      radial-gradient(circle at 30% 40%, rgba(201,169,110,0.35), transparent 55%),
-      linear-gradient(135deg, #1b1b1e, #0e0e10);
+    background: var(--bg);
     border: 1px solid var(--line);
-  }
-  .work:nth-child(2) .work-visual {
-    background:
-      radial-gradient(circle at 70% 30%, rgba(239,233,221,0.18), transparent 50%),
-      linear-gradient(200deg, #18181b, #0c0c0d);
-  }
-  .work:nth-child(3) .work-visual {
-    background:
-      repeating-linear-gradient(90deg, rgba(201,169,110,0.22) 0 1px, transparent 1px 22px),
-      linear-gradient(160deg, #16161a, #0d0d0f);
   }
   .work h3 { font-size: 1.7rem; }
   .work p { color: var(--muted); margin: 0.5rem 0 0; font-size: 0.92rem; }
@@ -290,7 +292,7 @@
   /* Contact */
   .contact { text-align: left; }
   .contact h2 {
-    font-size: clamp(3rem, 11vw, 7.5rem);
+    font-size: clamp(2.6rem, 8.5vw, 5.5rem);
     line-height: 0.95;
     font-style: italic;
     max-width: 12ch;
@@ -367,6 +369,9 @@
         <h1 class="name">li<em>k</em>u</h1>
         <p class="tagline">Forme, mișcare și detalii făcute cu grijă.</p>
         <a class="cta" href="#lucrari">Vezi lucrările &rarr;</a>
+        <div class="hero-meta">
+          <span>Design</span><span>Dezvoltare web</span><span>Three.js</span>
+        </div>
       </div>
     </div>
   </div>
@@ -509,7 +514,7 @@
     const knotGeo = new THREE.TorusKnotGeometry(1.5, 0.42, 280, 40);
     const knot = new THREE.Mesh(
       knotGeo,
-      new THREE.MeshStandardMaterial({ color: gold, metalness: 0.92, roughness: 0.22 })
+      new THREE.MeshStandardMaterial({ color: gold, metalness: 0.8, roughness: 0.35 })
     );
     const shell = new THREE.LineSegments(
       new THREE.WireframeGeometry(new THREE.TorusKnotGeometry(1.62, 0.42, 90, 14)),
@@ -535,7 +540,7 @@
     dustGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     const dust = new THREE.Points(
       dustGeo,
-      new THREE.PointsMaterial({ color: ivory, size: 0.02, transparent: true, opacity: 0.55 })
+      new THREE.PointsMaterial({ color: ivory, size: 0.018, transparent: true, opacity: 0.35 })
     );
     scene.add(dust);
 
@@ -553,9 +558,9 @@
       camera.aspect = w / h;
       // Keep the form to the right on wide screens and centred on phones.
       const narrow = w < 640;
-      group.position.x = narrow ? 0 : 1.6;
-      group.position.y = narrow ? 1.2 : 0.2;
-      group.scale.setScalar(narrow ? 0.7 : 1);
+      group.position.x = narrow ? 0 : 2.4;
+      group.position.y = narrow ? 1.7 : 0.6;
+      group.scale.setScalar(narrow ? 0.5 : 0.85);
       camera.updateProjectionMatrix();
     }
     window.addEventListener("resize", resize);

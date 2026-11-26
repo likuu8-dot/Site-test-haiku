@@ -756,12 +756,26 @@
      ============================================================ */
   const MODELS = {};
   const TEX = {};
+  /* Modelul e luat ca fișier .glb; dacă nu există, se folosește varianta .glb.txt (base64). */
+  async function fetchModelBuffer(file) {
+    try {
+      const r = await fetch(ASSET + "models/" + file + ".glb");
+      if (r.ok) return await r.arrayBuffer();
+    } catch (e) { /* încercăm varianta text */ }
+    const r2 = await fetch(ASSET + "models/" + file + ".glb.txt");
+    if (!r2.ok) throw new Error("lipsește modelul " + file);
+    const bin = atob((await r2.text()).trim());
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes.buffer;
+  }
   async function loadAssets(onProgress) {
     const loader = new GLTFLoader();
     loader.setMeshoptDecoder(MeshoptDecoder);
     const texLoader = new THREE.TextureLoader();
     const jobs = Object.entries(MODEL_DEF).map(async ([key, def]) => {
-      const gltf = await loader.loadAsync(ASSET + "models/" + def.file + ".glb");
+      const buf = await fetchModelBuffer(def.file);
+      const gltf = await new Promise((resolve, reject) => loader.parse(buf, ASSET + "models/", resolve, reject));
       gltf.scene.updateMatrixWorld(true);
       // Caseta reală: modelele cu schelet trebuie măsurate după transformările oaselor.
       const box = new THREE.Box3();

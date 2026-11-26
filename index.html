@@ -15,6 +15,7 @@
     --muted: #8f897d;
     --accent: #c9a96e;
     --line: rgba(239, 233, 221, 0.12);
+    --ghost: rgba(201, 169, 110, 0.22);
     --font-display: "Cormorant Garamond", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
     --font-body: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     color-scheme: dark;
@@ -178,7 +179,11 @@
     to { opacity: 1; transform: none; }
   }
 
-  section { padding-block: 5.5rem; }
+  section {
+    position: relative;
+    overflow: hidden;
+    padding-block: 5.5rem;
+  }
   .section-head {
     display: flex;
     justify-content: space-between;
@@ -344,10 +349,47 @@
     .nav a { font-size: 0.7rem; letter-spacing: 0.12em; }
   }
 
+  /* Parallax: layers move through the CSS `translate` property (set by script),
+     so hover and entrance animations that use `transform` keep working. */
+  #progress {
+    position: fixed;
+    top: env(safe-area-inset-top, 0px);
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--accent);
+    transform-origin: 0 50%;
+    transform: scaleX(0);
+    z-index: 20;
+  }
+  .wrap { position: relative; z-index: 1; }
+  .ghost {
+    position: absolute;
+    top: 1.5rem;
+    left: 0;
+    z-index: 0;
+    font-family: var(--font-display);
+    font-style: italic;
+    font-weight: 300;
+    font-size: clamp(6rem, 30vw, 17rem);
+    line-height: 0.8;
+    white-space: nowrap;
+    color: transparent;
+    -webkit-text-stroke: 1px var(--ghost);
+    pointer-events: none;
+    user-select: none;
+  }
+  .work, .portrait, .mail, .name, .tagline, .cta, .hero-meta, .hero-inner .label,
+  .section-head, .about-copy, .skills, .contact h2, footer {
+    will-change: translate;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
   }
 </style>
+
+<div id="progress" aria-hidden="true"></div>
 
 <div class="wrap">
   <header class="top">
@@ -378,6 +420,7 @@
 
   <div class="wrap">
     <section id="despre" aria-labelledby="despre-title">
+      <span class="ghost" aria-hidden="true">despre</span>
       <div class="section-head">
         <h2 id="despre-title">Despre</h2>
         <span class="label">Cine sunt</span>
@@ -401,6 +444,7 @@
     </section>
 
     <section id="lucrari" aria-labelledby="lucrari-title">
+      <span class="ghost" aria-hidden="true">lucrări</span>
       <div class="section-head">
         <h2 id="lucrari-title">Lucrări</h2>
         <span class="label">Selecție</span>
@@ -434,6 +478,7 @@
     </section>
 
     <section id="contact" class="contact" aria-labelledby="contact-title">
+      <span class="ghost" aria-hidden="true">contact</span>
       <div class="section-head">
         <h2 id="contact-title" class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Contact</h2>
         <span class="label">Contact</span>
@@ -586,4 +631,74 @@
     frame();
     if (reduceMotion) window.addEventListener("resize", frame);
   }
+</script>
+
+<script>
+  // Scroll parallax. Each layer moves by (distance from viewport centre) x speed:
+  // positive speed drifts slower than the page, negative speed drifts faster.
+  (function () {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const phone = window.matchMedia("(max-width: 760px)");
+    const bar = document.getElementById("progress");
+
+    const layers = [
+      [".hero-inner .label", -0.1],
+      [".name", 0.24],
+      [".tagline", 0.14],
+      [".hero .cta", 0.06],
+      [".hero-meta", -0.08],
+      ["#despre .section-head", 0.08],
+      [".portrait", -0.14],
+      [".about-copy", 0.1],
+      [".skills", 0.04],
+      ["#lucrari .section-head", 0.08],
+      [".mail", 0.1],
+      ["#contact .section-head", 0.08],
+      [".contact h2", -0.12],
+      ["footer", 0.2]
+    ];
+    const items = [];
+    layers.forEach(([sel, speed]) => {
+      document.querySelectorAll(sel).forEach((el) => items.push({ el, speed, x: 0 }));
+    });
+    // Work cards drift at three depths, so the row feels staggered.
+    [0.05, 0.12, 0.2].forEach((speed, i) => {
+      document.querySelectorAll(".work").forEach((el, n) => {
+        if (n % 3 === i) items.push({ el, speed, x: 0 });
+      });
+    });
+    // Outlined section words drift sideways as well as vertically.
+    const ghostX = { despre: 0.07, lucrari: -0.07, contact: 0.09 };
+    document.querySelectorAll(".ghost").forEach((el) => {
+      const id = el.parentElement.id;
+      items.push({ el, speed: 0.3, x: ghostX[id] || 0 });
+    });
+
+    let queued = false;
+    function update() {
+      queued = false;
+      const vh = window.innerHeight;
+      const k = phone.matches ? 0.6 : 1; // softer on phones
+      items.forEach((it) => {
+        const r = it.el.getBoundingClientRect();
+        const dist = r.top + r.height / 2 - vh / 2;
+        const y = -dist * it.speed * k;
+        const x = dist * it.x * k;
+        it.el.style.translate = `${x.toFixed(1)}px ${y.toFixed(1)}px`;
+      });
+      if (bar) {
+        const max = Math.max(1, document.documentElement.scrollHeight - vh);
+        bar.style.transform = `scaleX(${Math.min(1, window.scrollY / max).toFixed(4)})`;
+      }
+    }
+    function request() {
+      if (!queued) {
+        queued = true;
+        requestAnimationFrame(update);
+      }
+    }
+    window.addEventListener("scroll", request, { passive: true });
+    window.addEventListener("resize", request);
+    update();
+  })();
 </script>

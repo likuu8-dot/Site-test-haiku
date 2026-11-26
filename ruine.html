@@ -1,0 +1,1965 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="description" content="Ruinele Umbrei — joc de acțiune și loot în Three.js, cu arbore de pasive, echipament și hărți generate.">
+<title>Ruinele Umbrei</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --bg: #07060a;
+    --panel: rgba(14, 12, 18, 0.92);
+    --line: rgba(217, 178, 111, 0.22);
+    --gold: #d9b26f;
+    --text: #ece5d3;
+    --muted: rgba(236, 229, 211, 0.6);
+    --hp: #d84545;
+    --mp: #4a80ff;
+    --xp: #c9a24a;
+    --display: "Cinzel", "Times New Roman", Georgia, serif;
+    --body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--body); overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+  [hidden] { display: none !important; }
+  button { font: inherit; color: inherit; }
+  canvas#gl, canvas#fx { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  canvas#fx { pointer-events: none; z-index: 2; }
+
+  /* HUD */
+  #hud { position: fixed; inset: 0; z-index: 5; pointer-events: none; }
+  .hud-top {
+    position: absolute;
+    top: max(10px, env(safe-area-inset-top, 0px));
+    left: max(10px, env(safe-area-inset-left, 0px));
+    right: max(10px, env(safe-area-inset-right, 0px));
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+  .bars { width: min(260px, 52vw); display: grid; gap: 5px; }
+  .bar { position: relative; height: 14px; border-radius: 8px; background: rgba(0,0,0,0.6); border: 1px solid var(--line); overflow: hidden; }
+  .bar i { position: absolute; inset: 0 auto 0 0; width: 100%; transition: width 0.15s linear; }
+  .bar.hp i { background: linear-gradient(90deg, #7a1515, var(--hp)); }
+  .bar.mp i { background: linear-gradient(90deg, #203c80, var(--mp)); }
+  .bar.xp { height: 6px; }
+  .bar.xp i { background: var(--xp); }
+  .bar span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-shadow: 0 1px 2px #000; }
+  .hud-info { text-align: center; font-family: var(--display); font-size: 12px; line-height: 1.3; text-shadow: 0 1px 3px #000; }
+  .hud-info b { display: block; font-size: 13px; color: var(--gold); }
+  .hud-btns { display: grid; gap: 6px; pointer-events: auto; }
+  .btn-ghost {
+    pointer-events: auto;
+    background: rgba(10,9,14,0.82);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 8px 11px;
+    font-family: var(--display);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .btn-ghost:active { background: rgba(40,34,50,0.9); }
+  #msg {
+    position: absolute;
+    top: 30%;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 88vw;
+    text-align: center;
+    font-family: var(--display);
+    font-size: 15px;
+    color: var(--gold);
+    text-shadow: 0 2px 6px #000;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  #msg.show { opacity: 1; }
+
+  .joy { position: absolute; width: 110px; height: 110px; margin: -55px 0 0 -55px; border-radius: 50%; border: 1px solid var(--line); background: rgba(0,0,0,0.25); display: none; pointer-events: none; }
+  .joy.on { display: block; }
+  .joy i { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: rgba(217,178,111,0.35); border: 1px solid var(--gold); }
+
+  .skills {
+    position: absolute;
+    right: max(12px, env(safe-area-inset-right, 0px));
+    bottom: max(14px, env(safe-area-inset-bottom, 0px));
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+    pointer-events: auto;
+  }
+  .skill {
+    position: relative;
+    width: 66px;
+    height: 66px;
+    border-radius: 50%;
+    border: 1px solid var(--gold);
+    background: radial-gradient(circle at 35% 30%, #2a2236, #0b0910);
+    font-family: var(--display);
+    font-size: 10px;
+    line-height: 1.1;
+    letter-spacing: 0.02em;
+    padding: 0;
+    cursor: pointer;
+    overflow: hidden;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.6);
+  }
+  .skill.pot { width: 56px; height: 56px; border-color: #c04848; background: radial-gradient(circle at 35% 30%, #4a1616, #120707); }
+  .skill .cdv {
+    position: absolute;
+    inset: 0;
+    background: conic-gradient(rgba(0,0,0,0.72) var(--cd, 0%), transparent 0);
+    pointer-events: none;
+  }
+  .skill span { position: relative; z-index: 1; }
+  .skill b { position: absolute; right: 5px; bottom: 3px; font-size: 11px; color: var(--gold); z-index: 1; }
+  .skill:active { transform: scale(0.95); }
+
+  /* Screens and panels */
+  .screen, .panel {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    background: #050408;
+    display: flex;
+    flex-direction: column;
+    padding: max(14px, env(safe-area-inset-top, 0px)) max(14px, env(safe-area-inset-right, 0px)) max(14px, env(safe-area-inset-bottom, 0px)) max(14px, env(safe-area-inset-left, 0px));
+    overflow: hidden;
+  }
+  .screen-inner { margin: auto; width: min(560px, 100%); max-height: 100%; overflow-y: auto; padding: 4px; touch-action: pan-y; user-select: none; }
+  h1, h2 { font-family: var(--display); font-weight: 700; margin: 0; letter-spacing: 0.04em; }
+  h1 { font-size: clamp(30px, 8vw, 46px); color: var(--gold); text-align: center; text-shadow: 0 3px 14px rgba(217,178,111,0.25); }
+  .subtitle { text-align: center; color: var(--muted); font-size: 14px; margin: 8px 0 22px; line-height: 1.5; }
+  .label { font-family: var(--display); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); margin: 18px 0 8px; }
+  .choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px; }
+  .choice {
+    background: rgba(20,17,26,0.9);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px;
+    text-align: left;
+    cursor: pointer;
+    min-width: 0;
+  }
+  .choice b { display: block; font-family: var(--display); font-size: 15px; margin-bottom: 4px; }
+  .choice small { color: var(--muted); font-size: 12px; line-height: 1.4; display: block; }
+  .choice[aria-checked="true"] { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset, 0 0 18px rgba(217,178,111,0.18); }
+  .cta { display: grid; gap: 10px; margin-top: 24px; }
+  .cta button {
+    font-family: var(--display);
+    font-size: 16px;
+    letter-spacing: 0.08em;
+    padding: 15px;
+    border-radius: 12px;
+    border: 1px solid var(--gold);
+    background: linear-gradient(180deg, #3a2c16, #1a130a);
+    color: var(--text);
+    cursor: pointer;
+  }
+  .cta button.secondary { background: transparent; border-color: var(--line); font-size: 14px; }
+  .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .panel-head .pts { font-family: var(--display); color: var(--gold); font-size: 14px; }
+  .close { border: 1px solid var(--line); background: rgba(0,0,0,0.4); border-radius: 10px; padding: 9px 14px; cursor: pointer; font-family: var(--display); font-size: 12px; }
+  #treeCanvas { flex: 1 1 auto; width: 100%; min-height: 0; border-radius: 14px; border: 1px solid var(--line); background: radial-gradient(circle at 50% 50%, #120f18, #05040a); touch-action: none; }
+  .tree-info {
+    margin-top: 10px;
+    min-height: 74px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: rgba(18,15,24,0.9);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .tree-info b { font-family: var(--display); font-size: 14px; color: var(--gold); }
+  .tree-info .hint { color: var(--muted); font-size: 12px; }
+  .inv-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .cell, .slot {
+    border: 1px solid var(--rc, #444);
+    background: rgba(16,13,20,0.95);
+    border-radius: 8px;
+    min-height: 44px;
+    padding: 4px;
+    font-size: 10px;
+    color: var(--rc, #ddd);
+    cursor: pointer;
+    text-align: center;
+    overflow: hidden;
+    line-height: 1.2;
+  }
+  .cell.empty { border-style: dashed; border-color: rgba(255,255,255,0.1); background: transparent; cursor: default; }
+  .equip-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  .slot { text-align: left; padding: 8px; min-height: 52px; }
+  .slot small { display: block; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .slot b { display: block; font-size: 12px; font-weight: 600; color: var(--rc, var(--text)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .detail {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: rgba(18,15,24,0.95);
+    min-height: 90px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .detail .it-name { font-family: var(--display); font-size: 15px; font-weight: 700; }
+  .detail .it-meta { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  .detail .it-line { color: #b8e0ff; }
+  .detail .acts { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .detail .acts button { font-family: var(--display); font-size: 12px; padding: 9px 12px; border-radius: 9px; border: 1px solid var(--gold); background: rgba(40,30,12,0.8); cursor: pointer; }
+  .detail .acts button.danger { border-color: #a33; background: rgba(60,14,14,0.8); }
+  .statbox { font-size: 12px; color: var(--muted); line-height: 1.7; columns: 2; column-gap: 14px; margin-top: 6px; }
+  .statbox b { color: var(--text); font-weight: 600; }
+
+  .dead-screen .screen-inner { text-align: center; }
+  .dead-screen h1 { color: #d05050; }
+
+  @media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
+</style>
+</head>
+<body>
+
+<canvas id="gl"></canvas>
+<canvas id="fx"></canvas>
+
+<div id="hud" hidden>
+  <div class="hud-top">
+    <div class="bars">
+      <div class="bar hp"><i id="hpFill"></i><span id="hpTxt"></span></div>
+      <div class="bar mp"><i id="mpFill"></i><span id="mpTxt"></span></div>
+      <div class="bar xp"><i id="xpFill"></i></div>
+    </div>
+    <div class="hud-info"><b id="mapName"></b><span id="lvlTxt"></span></div>
+    <div class="hud-btns">
+      <button class="btn-ghost" data-open="tree" type="button">Arbore</button>
+      <button class="btn-ghost" data-open="inv" type="button">Inventar</button>
+    </div>
+  </div>
+  <div id="msg"></div>
+  <div class="joy" id="joy"><i id="joyKnob"></i></div>
+  <div class="skills" id="skillBar">
+    <button class="skill" data-skill="0" id="sk0" type="button"><span class="cdv"></span><span id="sk0n">Abilitate</span><b>1</b></button>
+    <button class="skill" data-skill="1" id="sk1" type="button"><span class="cdv"></span><span id="sk1n">Abilitate</span><b>2</b></button>
+    <button class="skill" data-skill="2" id="sk2" type="button"><span class="cdv"></span><span id="sk2n">Abilitate</span><b>3</b></button>
+    <button class="skill pot" id="potBtn" type="button"><span class="cdv"></span><span>Viață</span><b id="potCount">3</b></button>
+  </div>
+</div>
+
+<section class="screen" id="startScreen">
+  <div class="screen-inner">
+    <h1>Ruinele Umbrei</h1>
+    <p class="subtitle">Coboară prin hărți generate, învinge monștri din șase rase, adună echipament și construiește-ți arborele de pasive.</p>
+    <div class="label">Rasă</div>
+    <div class="choices" id="raceChoices" role="radiogroup" aria-label="Rasă"></div>
+    <div class="label">Clasă</div>
+    <div class="choices" id="classChoices" role="radiogroup" aria-label="Clasă"></div>
+    <div class="cta">
+      <button type="button" id="btnContinue" hidden>Continuă jocul salvat</button>
+      <button type="button" id="btnNew">Începe un joc nou</button>
+      <button type="button" class="secondary" id="btnHelp">Comenzi</button>
+    </div>
+    <p class="subtitle" id="helpText" hidden style="text-align:left;font-size:13px;margin-top:16px">
+      Pe telefon: glisează pe jumătatea stângă a ecranului pentru a te mișca. Atinge 1, 2 și 3 pentru abilități, iar butonul roșu bea o poțiune. Abilitățile țintesc automat cel mai apropiat monstru. Pe calculator: WASD sau săgețile, tastele 1-3 și Q pentru poțiune. Atacul de bază se execută automat.
+    </p>
+    <p class="subtitle" id="saveNote" style="font-size:12px"></p>
+  </div>
+</section>
+
+<section class="panel" id="panelTree" hidden>
+  <div class="panel-head">
+    <h2>Arbore de pasive</h2>
+    <span class="pts" id="ptsTxt"></span>
+    <button class="close" data-close type="button">Închide</button>
+  </div>
+  <canvas id="treeCanvas"></canvas>
+  <div class="tree-info" id="treeInfo"><b>Arbore</b><div class="hint">Atinge un nod pentru detalii. Trage pentru a te mișca, ciupește pentru zoom.</div></div>
+</section>
+
+<section class="panel" id="panelInv" hidden>
+  <div class="panel-head">
+    <h2>Inventar</h2>
+    <button class="close" data-close type="button">Închide</button>
+  </div>
+  <div class="screen-inner" style="margin:0;width:100%;max-width:640px;margin-inline:auto;overflow-y:auto;padding:0 2px 12px;">
+    <div class="label" style="margin-top:4px">Echipament</div>
+    <div class="equip-grid" id="equipGrid"></div>
+    <div class="label">Stats</div>
+    <div class="statbox" id="statBox"></div>
+    <div class="label">Rucsac (<span id="invCount">0</span>/24)</div>
+    <div class="inv-grid" id="invGrid"></div>
+    <div class="detail" id="itemDetail"><span class="it-meta">Atinge un obiect pentru detalii.</span></div>
+  </div>
+</section>
+
+<section class="screen dead-screen" id="deadScreen" hidden>
+  <div class="screen-inner">
+    <h1>Ai căzut</h1>
+    <p class="subtitle">Umbrele te-au învins. Harta curentă va fi regenerată, iar echipamentul și arborele rămân ale tale.</p>
+    <div class="cta"><button type="button" id="btnRespawn">Reîncepe harta</button></div>
+  </div>
+</section>
+
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+    }
+  }
+</script>
+
+<script type="module">
+  import * as THREE from "three";
+
+  /* ============================================================
+     Utilități
+     ============================================================ */
+  const $ = (id) => document.getElementById(id);
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const rint = (a, b) => Math.floor(rnd(a, b + 1));
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const SAVE_KEY = "ruinele-umbrei-v1";
+
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /* ============================================================
+     Date statice
+     ============================================================ */
+  const STAT_TEXT = {
+    life: "+{v} viață", mana: "+{v} mană", armor: "+{v} armură", dmg: "+{v}% daună",
+    crit: "+{v}% șansă critică", speed: "+{v}% viteză de mișcare", atkSpeed: "+{v}% viteză de atac",
+    resFire: "+{v}% rezistență la foc", resCold: "+{v}% rezistență la gheață", resLight: "+{v}% rezistență la fulger",
+    regen: "+{v} viață regenerată/s", xpMul: "+{v}% experiență", lifePct: "+{v}% viață maximă"
+  };
+  const STAT_SHORT = {
+    life: "Viață", mana: "Mană", armor: "Armură", dmg: "Daună %", crit: "Critic %", speed: "Viteză %",
+    atkSpeed: "Atac %", resFire: "Foc %", resCold: "Gheață %", resLight: "Fulger %", regen: "Regen/s",
+    xpMul: "XP %", lifePct: "Viață %"
+  };
+  const statLine = (k, v) => STAT_TEXT[k].replace("{v}", String(Math.round(v * 10) / 10));
+
+  const RACE_PLAYER = {
+    om:    { name: "Om",    skin: 0xf1c9a5, bonus: { life: 10, xpMul: 10 }, desc: "Echilibrat. +10 viață, +10% experiență." },
+    elf:   { name: "Elf",   skin: 0xd8ffe8, bonus: { speed: 12, crit: 4, mana: 10 }, desc: "Rapid. +12% viteză, +4% critic, +10 mană." },
+    ork:   { name: "Ork",   skin: 0x8fbf6b, bonus: { life: 20, armor: 10, speed: -5 }, desc: "Rezistent. +20 viață, +10 armură, -5% viteză." },
+    pitic: { name: "Pitic", skin: 0xd9a57a, bonus: { armor: 25, resFire: 15, speed: -10 }, desc: "Blindat. +25 armură, +15% foc, -10% viteză." }
+  };
+
+  const CLASSES = {
+    mage: {
+      name: "Mag", color: 0x7af0ff, base: { life: 60, mana: 100, armor: 3 },
+      skills: ["fireball", "frostnova", "chain"],
+      basic: { kind: "proj", dmg: 6, cd: 0.5, range: 10, speed: 15, elem: "fire", color: 0xffa050, aoe: 0 },
+      desc: "Vrăji de foc, gheață și fulger. Fragil, dar devastator."
+    },
+    warrior: {
+      name: "Războinic", color: 0xffb36b, base: { life: 120, mana: 45, armor: 14 },
+      skills: ["cleave", "slam", "battlecry"],
+      basic: { kind: "melee", dmg: 8, cd: 0.6, range: 2.0, arc: Math.PI * 0.8, elem: "phys", color: 0xffffff },
+      desc: "Lovituri grele și strigăte de luptă. Rezistent în corp la corp."
+    },
+    ranger: {
+      name: "Arcaș", color: 0x9dff8a, base: { life: 85, mana: 65, armor: 7 },
+      skills: ["volley", "rapid", "trap"],
+      basic: { kind: "proj", dmg: 7, cd: 0.5, range: 12, speed: 20, elem: "phys", color: 0xdfffd0, aoe: 0 },
+      desc: "Săgeți rapide, salve și capcane."
+    }
+  };
+
+  const SKILLS = {
+    fireball:  { name: "Minge de foc", kind: "proj", dmg: 17, cd: 1.0, mana: 9, range: 14, speed: 13, elem: "fire", color: 0xff6a1f, aoe: 1.8 },
+    frostnova: { name: "Nova gheții", kind: "nova", dmg: 11, cd: 3.5, mana: 14, radius: 4.2, elem: "cold", slow: 2.5, color: 0x9be7ff },
+    chain:     { name: "Lanț fulgerat", kind: "chain", dmg: 12, cd: 1.3, mana: 10, range: 9, jumps: 4, jumpRange: 4.5, elem: "lightning", color: 0xfff06b },
+    cleave:    { name: "Tăiere", kind: "melee", dmg: 20, cd: 0.8, mana: 4, range: 2.6, arc: Math.PI * 0.9, elem: "phys", color: 0xffd28a },
+    slam:      { name: "Lovitură de pământ", kind: "nova", dmg: 24, cd: 4, mana: 14, radius: 3.2, elem: "phys", stun: 0.9, color: 0xffa040 },
+    battlecry: { name: "Strigăt de luptă", kind: "buff", cd: 12, mana: 20, duration: 8, color: 0xff5555 },
+    volley:    { name: "Salvă de săgeți", kind: "fan", dmg: 9, count: 5, spread: 0.55, cd: 1.3, mana: 10, range: 11, speed: 18, elem: "phys", color: 0xdfffd0 },
+    rapid:     { name: "Tir rapid", kind: "proj", dmg: 10, cd: 0.7, mana: 8, range: 12, speed: 22, elem: "phys", color: 0xbfffa0 },
+    trap:      { name: "Capcană", kind: "nova", dmg: 24, cd: 6, mana: 16, radius: 2.6, elem: "phys", atTarget: true, delay: 0.9, color: 0x66ff66 }
+  };
+
+  const RACES_MON = {
+    goblin:    { name: "Goblin", color: 0x7fbf4a, hp: 26, dmg: 5, speed: 3.6, range: 1.1, cd: 1.0, xp: 8, scale: 0.6, shape: "cone", aggro: 9 },
+    orc:       { name: "Orc", color: 0x4a8a3a, hp: 60, dmg: 9, speed: 2.4, range: 1.4, cd: 1.4, xp: 16, scale: 1.0, shape: "box", aggro: 8 },
+    undead:    { name: "Nemort", color: 0xc3cad8, hp: 40, dmg: 7, speed: 2.0, range: 1.2, cd: 1.2, xp: 14, scale: 0.95, shape: "thin", aggro: 8, revive: true, resist: { phys: 0.2 } },
+    demon:     { name: "Demon", color: 0xd33a3a, hp: 44, dmg: 10, speed: 2.6, range: 7.0, cd: 1.8, xp: 22, scale: 0.95, shape: "diamond", aggro: 11, ranged: true, resist: { fire: 0.5 } },
+    beast:     { name: "Fiară", color: 0x9a6a3a, hp: 34, dmg: 8, speed: 3.2, range: 1.3, cd: 1.1, xp: 15, scale: 0.8, shape: "beast", aggro: 9, pounce: true },
+    elemental: { name: "Elemental", color: 0x66d9ff, hp: 52, dmg: 6, speed: 1.9, range: 1.2, cd: 1.5, xp: 20, scale: 1.0, shape: "ico", aggro: 7, explode: { dmg: 12, radius: 2.2 }, resist: { lightning: 0.5 } }
+  };
+
+  const THEMES = [
+    { name: "Catacombe", floor: 0x2a2a33, wall: 0x4a4a58, fog: 0x0a0a10, light: 0x9fb3ff, pool: ["undead", "goblin", "beast"], boss: "orc", bossName: "Comandantul Nemort" },
+    { name: "Pădurea Spinilor", floor: 0x1f3a24, wall: 0x2f5a34, fog: 0x06120a, light: 0xa6ffb0, pool: ["goblin", "beast", "orc"], boss: "beast", bossName: "Mama Fiarelor" },
+    { name: "Fortăreața Orcilor", floor: 0x3a2a1e, wall: 0x5c4330, fog: 0x110a06, light: 0xffb27a, pool: ["orc", "demon", "goblin"], boss: "orc", bossName: "Warlordul" },
+    { name: "Cristalul Elemental", floor: 0x1d2a3f, wall: 0x3a5a8a, fog: 0x050913, light: 0x8ae6ff, pool: ["elemental", "demon", "undead"], boss: "demon", bossName: "Străjerul Abisal" }
+  ];
+
+  const SLOTS = ["weapon", "head", "chest", "hands", "feet", "ring", "amulet"];
+  const SLOT_NAME = { weapon: "Armă", head: "Cască", chest: "Armură", hands: "Mănuși", feet: "Cizme", ring: "Inel", amulet: "Amuletă" };
+  const BASE_NAMES = {
+    weapon: ["Spadă", "Baston", "Arc", "Topor", "Ciomag"],
+    head: ["Coif", "Diadema", "Glugă"],
+    chest: ["Zale", "Robă", "Platoșă"],
+    hands: ["Mănuși", "Brațări"],
+    feet: ["Cizme", "Sandale"],
+    ring: ["Inel", "Sigiliu"],
+    amulet: ["Amuletă", "Talisman"]
+  };
+  const RARITY = {
+    normal: { label: "Obișnuit", color: "#cfcfcf", affixes: [0, 0] },
+    magic:  { label: "Magic", color: "#6f8cff", affixes: [1, 2] },
+    rare:   { label: "Rar", color: "#ffe066", affixes: [3, 4] },
+    unique: { label: "Unic", color: "#ff9a3d", affixes: [0, 0] }
+  };
+  const AFFIX_POOL = [
+    { k: "dmg", min: 6, max: 18 }, { k: "life", min: 8, max: 30 }, { k: "mana", min: 6, max: 20 },
+    { k: "armor", min: 6, max: 30 }, { k: "crit", min: 2, max: 6 }, { k: "speed", min: 3, max: 12 },
+    { k: "atkSpeed", min: 4, max: 14 }, { k: "resFire", min: 5, max: 25 }, { k: "resCold", min: 5, max: 25 },
+    { k: "resLight", min: 5, max: 25 }, { k: "regen", min: 1, max: 4 }, { k: "xpMul", min: 5, max: 20 },
+    { k: "lifePct", min: 4, max: 12 }
+  ];
+  const UNIQUES = [
+    { name: "Inima Vulcanului", slot: "ring", affixes: [{ k: "dmg", v: 25 }, { k: "resFire", v: 30 }, { k: "life", v: 20 }] },
+    { name: "Pasul Umbrei", slot: "feet", affixes: [{ k: "speed", v: 20 }, { k: "crit", v: 4 }, { k: "atkSpeed", v: 10 }] },
+    { name: "Cronica Gheții", slot: "weapon", affixes: [{ k: "resCold", v: 25 }, { k: "dmg", v: 20 }, { k: "regen", v: 2 }] }
+  ];
+  const PREFIX_WORDS = ["Ruinei", "Umbrei", "Furtunei", "Fierului", "Abisului", "Cenușii"];
+
+  /* ============================================================
+     Arbore de pasive (generat determinist)
+     ============================================================ */
+  const NODE_POOL = [
+    { k: "life", v: 6 }, { k: "mana", v: 5 }, { k: "dmg", v: 4 }, { k: "crit", v: 2 }, { k: "speed", v: 3 },
+    { k: "armor", v: 5 }, { k: "atkSpeed", v: 4 }, { k: "resFire", v: 4 }, { k: "resCold", v: 4 },
+    { k: "resLight", v: 4 }, { k: "regen", v: 0.6 }, { k: "xpMul", v: 5 }, { k: "lifePct", v: 3 }
+  ];
+  const NODE_NAME = {
+    life: "Vitalitate", mana: "Înțelepciune", dmg: "Forță", crit: "Precizie", speed: "Agilitate",
+    armor: "Rezistență", atkSpeed: "Iuțeală", resFire: "Flacără", resCold: "Gheață", resLight: "Furtună",
+    regen: "Regenerare", xpMul: "Cunoaștere", lifePct: "Robustețe"
+  };
+  const KEYSTONES = [
+    { name: "Carne de fier", stats: { armor: 40, speed: -8 } },
+    { name: "Foc interior", stats: { dmg: 22, resFire: 15 } },
+    { name: "Ochi de vultur", stats: { crit: 8, atkSpeed: 10 } },
+    { name: "Sânge de cristal", stats: { lifePct: 18, mana: -20 } },
+    { name: "Vânt liber", stats: { speed: 20, armor: -10 } },
+    { name: "Vrăjitor al abisului", stats: { mana: 40, dmg: 10, life: -20 } }
+  ];
+
+  function buildTree() {
+    const rng = mulberry32(20260907);
+    const nodes = [{ id: 0, x: 0, y: 0, ring: 0, type: "root", name: "Rădăcina Umbrei", stats: {}, links: [] }];
+    let prev = [0];
+    for (let r = 1; r <= 6; r++) {
+      const count = 8 * r;
+      const ids = [];
+      const ringR = r * 78;
+      for (let i = 0; i < count; i++) {
+        const id = nodes.length;
+        const ang = (Math.PI * 2 * i) / count + (r % 2 ? Math.PI / count : 0);
+        const x = Math.cos(ang) * ringR, y = Math.sin(ang) * ringR;
+        let type = "small", stats = {}, name;
+        if (r === 3 && i % 8 === 0) {
+          type = "keystone";
+          const ks = KEYSTONES[Math.floor(rng() * KEYSTONES.length)];
+          name = ks.name; stats = { ...ks.stats };
+        } else if (i % 5 === 0) {
+          type = "notable";
+          const a = NODE_POOL[Math.floor(rng() * NODE_POOL.length)];
+          const b = NODE_POOL[Math.floor(rng() * NODE_POOL.length)];
+          stats[a.k] = (stats[a.k] || 0) + Math.round(a.v * 2.5 * 10) / 10;
+          stats[b.k] = (stats[b.k] || 0) + Math.round(b.v * 2.5 * 10) / 10;
+          name = NODE_NAME[a.k] + " & " + NODE_NAME[b.k];
+        } else {
+          const a = NODE_POOL[Math.floor(rng() * NODE_POOL.length)];
+          stats[a.k] = a.v;
+          name = NODE_NAME[a.k];
+        }
+        nodes.push({ id, x, y, ring: r, type, name, stats, links: [] });
+        ids.push(id);
+      }
+      // Legături inelare
+      for (let i = 0; i < count; i++) {
+        const a = ids[i], b = ids[(i + 1) % count];
+        link(nodes, a, b);
+      }
+      // Legături spre inelul anterior
+      for (const id of ids) {
+        const n = nodes[id];
+        let best = prev[0], bd = Infinity;
+        for (const pid of prev) {
+          const p = nodes[pid];
+          const d = Math.hypot(p.x - n.x, p.y - n.y);
+          if (d < bd) { bd = d; best = pid; }
+        }
+        link(nodes, id, best);
+        if (prev.length > 1 && (n.id % 2 === 0)) {
+          let second = null, sd = Infinity;
+          for (const pid of prev) {
+            if (pid === best) continue;
+            const p = nodes[pid];
+            const d = Math.hypot(p.x - n.x, p.y - n.y);
+            if (d < sd) { sd = d; second = pid; }
+          }
+          if (second !== null && sd < 140) link(nodes, id, second);
+        }
+      }
+      prev = ids;
+    }
+    return nodes;
+  }
+  function link(nodes, a, b) {
+    if (a === b) return;
+    if (!nodes[a].links.includes(b)) nodes[a].links.push(b);
+    if (!nodes[b].links.includes(a)) nodes[b].links.push(a);
+  }
+  const TREE = buildTree();
+
+  /* ============================================================
+     Stare persistentă
+     ============================================================ */
+  const state = {
+    race: "om", cls: "mage", level: 1, xp: 0,
+    alloc: [0], inv: [], equip: {}, mapIndex: 0, potions: 3
+  };
+
+  function save() {
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify({
+        v: 1, race: state.race, cls: state.cls, level: state.level, xp: state.xp,
+        alloc: state.alloc, inv: state.inv, equip: state.equip, mapIndex: state.mapIndex, potions: state.potions
+      }));
+    } catch (e) { /* stocarea poate fi blocată; jocul continuă */ }
+  }
+  function load() {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return false;
+      const d = JSON.parse(raw);
+      if (!d || !RACE_PLAYER[d.race] || !CLASSES[d.cls]) return false;
+      Object.assign(state, {
+        race: d.race, cls: d.cls, level: d.level | 0 || 1, xp: d.xp | 0,
+        alloc: Array.isArray(d.alloc) && d.alloc.includes(0) ? d.alloc : [0],
+        inv: Array.isArray(d.inv) ? d.inv : [], equip: d.equip || {},
+        mapIndex: d.mapIndex | 0, potions: d.potions | 0
+      });
+      return true;
+    } catch (e) { return false; }
+  }
+  function hasSave() {
+    try { return !!localStorage.getItem(SAVE_KEY); } catch (e) { return false; }
+  }
+
+  /* ============================================================
+     Echipament
+     ============================================================ */
+  let itemSeq = 1;
+  function makeItem(ilvl, forceRarity) {
+    const slot = pick(SLOTS);
+    let rarity = forceRarity;
+    if (!rarity) {
+      const r = Math.random();
+      rarity = r < 0.6 ? "normal" : r < 0.88 ? "magic" : r < 0.98 ? "rare" : "unique";
+    }
+    if (rarity === "unique") {
+      const cand = UNIQUES.filter((u) => u.slot === slot);
+      const u = cand.length ? pick(cand) : UNIQUES[Math.floor(Math.random() * UNIQUES.length)];
+      return {
+        id: itemSeq++, name: u.name, rarity: "unique", slot: u.slot, ilvl,
+        affixes: u.affixes.map((a) => ({ k: a.k, v: a.v })), base: u.name
+      };
+    }
+    const base = pick(BASE_NAMES[slot]);
+    const [lo, hi] = RARITY[rarity].affixes;
+    const count = rint(lo, hi);
+    const pool = [...AFFIX_POOL];
+    const affixes = [];
+    const scale = 1 + ilvl * 0.03;
+    for (let i = 0; i < count && pool.length; i++) {
+      const idx = Math.floor(Math.random() * pool.length);
+      const a = pool.splice(idx, 1)[0];
+      affixes.push({ k: a.k, v: Math.max(1, Math.round(rnd(a.min, a.max) * scale)) });
+    }
+    let name = base;
+    if (rarity === "magic") name = base + " " + pick(PREFIX_WORDS);
+    if (rarity === "rare") name = pick(["Bestia", "Fantoma", "Jurământul", "Crucea"]) + " " + base.toLowerCase() + " " + pick(["al Furtunei", "al Umbrei", "al Abisului", "al Cenușii"]);
+    return { id: itemSeq++, name: name.charAt(0).toUpperCase() + name.slice(1), rarity, slot, ilvl, affixes, base };
+  }
+  const rarityColor = (r) => RARITY[r] ? RARITY[r].color : "#ccc";
+
+  function itemLines(it) {
+    return it.affixes.map((a) => `<div class="it-line">${statLine(a.k, a.v)}</div>`).join("");
+  }
+
+  /* ============================================================
+     Three.js
+     ============================================================ */
+  const canvas = $("gl");
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
+  const PIXEL_RATIO = Math.min(window.devicePixelRatio || 1, 1.5);
+  renderer.setPixelRatio(PIXEL_RATIO);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x07060a);
+  scene.fog = new THREE.FogExp2(0x07060a, 0.03);
+  const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 160);
+  const ambient = new THREE.AmbientLight(0xa0a0c0, 1.6);
+  const sun = new THREE.DirectionalLight(0xffffff, 2.0);
+  sun.position.set(10, 22, 8);
+  scene.add(ambient, sun);
+
+  const fxCanvas = $("fx");
+  const fx = fxCanvas.getContext("2d");
+  function sizeFx() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    fxCanvas.width = Math.round(window.innerWidth * dpr);
+    fxCanvas.height = Math.round(window.innerHeight * dpr);
+    fx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  sizeFx();
+
+  const matCache = new Map();
+  function basicMat(hex) {
+    if (!matCache.has(hex)) matCache.set(hex, new THREE.MeshBasicMaterial({ color: hex }));
+    return matCache.get(hex);
+  }
+  const elemColor = { fire: 0xff7a2e, cold: 0x8fe6ff, lightning: 0xfff06b, phys: 0xf2f2f2 };
+
+  /* Harta */
+  let mapGroup = new THREE.Group();
+  scene.add(mapGroup);
+  const TILE_W = 60, TILE_H = 60;
+  let grid = new Uint8Array(TILE_W * TILE_H).fill(1);
+  let rooms = [];
+
+  function generateGrid() {
+    for (let attempt = 0; attempt < 30; attempt++) {
+      const g = new Uint8Array(TILE_W * TILE_H).fill(1);
+      const rs = [];
+      for (let t = 0; t < 260 && rs.length < 9; t++) {
+        const w = rint(5, 9), h = rint(5, 9);
+        const x = rint(2, TILE_W - w - 3), y = rint(2, TILE_H - h - 3);
+        const ok = rs.every((r) => x + w + 2 < r.x || r.x + r.w + 2 < x || y + h + 2 < r.y || r.y + r.h + 2 < y);
+        if (!ok) continue;
+        rs.push({ x, y, w, h });
+        for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) g[j * TILE_W + i] = 0;
+      }
+      if (rs.length < 4) continue;
+      const carve = (i, j) => { g[j * TILE_W + i] = 0; };
+      for (let k = 1; k < rs.length; k++) {
+        const a = { x: Math.floor(rs[k - 1].x + rs[k - 1].w / 2), y: Math.floor(rs[k - 1].y + rs[k - 1].h / 2) };
+        const b = { x: Math.floor(rs[k].x + rs[k].w / 2), y: Math.floor(rs[k].y + rs[k].h / 2) };
+        for (let i = Math.min(a.x, b.x); i <= Math.max(a.x, b.x); i++) carve(i, a.y);
+        for (let j = Math.min(a.y, b.y); j <= Math.max(a.y, b.y); j++) carve(b.x, j);
+      }
+      grid = g;
+      rooms = rs;
+      return;
+    }
+  }
+
+  function isFloor(x, z) {
+    const i = Math.floor(x), j = Math.floor(z);
+    if (i < 0 || j < 0 || i >= TILE_W || j >= TILE_H) return false;
+    return grid[j * TILE_W + i] === 0;
+  }
+  function canStand(x, z, r) {
+    return isFloor(x + r, z) && isFloor(x - r, z) && isFloor(x, z + r) && isFloor(x, z - r) &&
+      isFloor(x + r * 0.7, z + r * 0.7) && isFloor(x - r * 0.7, z - r * 0.7) &&
+      isFloor(x + r * 0.7, z - r * 0.7) && isFloor(x - r * 0.7, z + r * 0.7);
+  }
+  function moveEntity(e, dx, dz, r) {
+    if (canStand(e.x + dx, e.z, r)) e.x += dx;
+    if (canStand(e.x, e.z + dz, r)) e.z += dz;
+    return Math.abs(dx) > 0 || Math.abs(dz) > 0;
+  }
+
+  function buildMapMeshes(theme) {
+    scene.remove(mapGroup);
+    mapGroup = new THREE.Group();
+    scene.add(mapGroup);
+    const floorTiles = [], wallTiles = [];
+    for (let j = 0; j < TILE_H; j++) for (let i = 0; i < TILE_W; i++) {
+      if (grid[j * TILE_W + i] === 0) floorTiles.push([i, j]);
+      else {
+        let near = false;
+        for (let dj = -1; dj <= 1 && !near; dj++) for (let di = -1; di <= 1 && !near; di++) {
+          const a = i + di, b = j + dj;
+          if (a >= 0 && b >= 0 && a < TILE_W && b < TILE_H && grid[b * TILE_W + a] === 0) near = true;
+        }
+        if (near) wallTiles.push([i, j]);
+      }
+    }
+    const dummy = new THREE.Object3D();
+    const fm = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.2, 1), new THREE.MeshStandardMaterial({ color: theme.floor, roughness: 0.95 }), floorTiles.length);
+    floorTiles.forEach(([i, j], n) => { dummy.position.set(i + 0.5, -0.1, j + 0.5); dummy.updateMatrix(); fm.setMatrixAt(n, dummy.matrix); });
+    const wm = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1.6, 1), new THREE.MeshStandardMaterial({ color: theme.wall, roughness: 0.8, metalness: 0.05 }), wallTiles.length);
+    wallTiles.forEach(([i, j], n) => { dummy.position.set(i + 0.5, 0.8, j + 0.5); dummy.updateMatrix(); wm.setMatrixAt(n, dummy.matrix); });
+    fm.receiveShadow = false;
+    mapGroup.add(fm, wm);
+    scene.fog.color.setHex(theme.fog);
+    scene.background.setHex(theme.fog);
+    sun.color.setHex(theme.light);
+    ambient.color.setHex(theme.light);
+  }
+
+  /* Model jucător */
+  let playerGroup = null;
+  function buildPlayerMesh() {
+    if (playerGroup) scene.remove(playerGroup);
+    const cls = CLASSES[state.cls];
+    const race = RACE_PLAYER[state.race];
+    const g = new THREE.Group();
+    const cloth = new THREE.MeshStandardMaterial({ color: cls.color, roughness: 0.5, metalness: 0.2, emissive: cls.color, emissiveIntensity: 0.08 });
+    const skin = new THREE.MeshStandardMaterial({ color: race.skin, roughness: 0.7 });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.4, 0.95, 10), cloth);
+    body.position.y = 0.55;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), skin);
+    head.position.y = 1.19;
+    g.add(body, head);
+    const wpnMat = new THREE.MeshStandardMaterial({ color: 0x9a8a6a, metalness: 0.6, roughness: 0.35 });
+    if (state.cls === "mage") {
+      const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 1.4, 6), wpnMat);
+      staff.position.set(0.42, 0.7, 0.1);
+      const orb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), new THREE.MeshBasicMaterial({ color: cls.color }));
+      orb.position.set(0.42, 1.45, 0.1);
+      g.add(staff, orb);
+    } else if (state.cls === "warrior") {
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.9, 0.04), new THREE.MeshStandardMaterial({ color: 0xdfe6f0, metalness: 0.9, roughness: 0.2 }));
+      blade.position.set(0.45, 0.8, 0.25);
+      blade.rotation.x = -0.3;
+      g.add(blade);
+    } else {
+      const bow = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.03, 6, 16, Math.PI), wpnMat);
+      bow.position.set(0.42, 0.9, 0.05);
+      bow.rotation.set(0, Math.PI / 2, Math.PI / 2);
+      g.add(bow);
+    }
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.5, 24), new THREE.MeshBasicMaterial({ color: cls.color, transparent: true, opacity: 0.35, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.02;
+    g.add(ring);
+    playerGroup = g;
+    scene.add(g);
+  }
+
+  /* Monștri */
+  function makeMonsterMesh(R, boss) {
+    let geo;
+    switch (R.shape) {
+      case "cone": geo = new THREE.ConeGeometry(0.45, 1.0, 6); geo.translate(0, 0.5, 0); break;
+      case "box": geo = new THREE.BoxGeometry(0.9, 1.3, 0.9); geo.translate(0, 0.65, 0); break;
+      case "thin": geo = new THREE.CylinderGeometry(0.22, 0.3, 1.5, 6); geo.translate(0, 0.75, 0); break;
+      case "diamond": geo = new THREE.OctahedronGeometry(0.6); geo.translate(0, 0.8, 0); break;
+      case "beast": geo = new THREE.BoxGeometry(1.2, 0.6, 0.6); geo.translate(0, 0.4, 0); break;
+      default: geo = new THREE.IcosahedronGeometry(0.6, 0); geo.translate(0, 0.7, 0); break;
+    }
+    const grp = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color: R.color, roughness: 0.6, metalness: 0.1, emissive: R.color, emissiveIntensity: R.shape === "ico" ? 0.35 : 0.06 });
+    const mesh = new THREE.Mesh(geo, mat);
+    grp.add(mesh);
+    const eyeMat = basicMat(boss ? 0xffd34d : 0xfff2b0);
+    const eyeGeo = new THREE.SphereGeometry(0.07, 6, 6);
+    const e1 = new THREE.Mesh(eyeGeo, eyeMat), e2 = new THREE.Mesh(eyeGeo, eyeMat);
+    const eyeY = R.shape === "beast" ? 0.5 : 1.0;
+    e1.position.set(0.14, eyeY, 0.3); e2.position.set(-0.14, eyeY, 0.3);
+    grp.add(e1, e2);
+    const s = R.scale * (boss ? 1.8 : 1);
+    grp.scale.setScalar(s);
+    return { grp, geo, mat };
+  }
+
+  /* Efecte */
+  const effects = [];
+  function addRingEffect(x, z, radius, color, life = 0.35, sector = null) {
+    let geo;
+    if (sector) {
+      geo = new THREE.RingGeometry(0.05, 1, 24, 1, sector.start, sector.len);
+    } else {
+      geo = new THREE.RingGeometry(0.85, 1, 40);
+    }
+    geo.rotateX(-Math.PI / 2);
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, 0.05, z);
+    scene.add(mesh);
+    effects.push({ kind: "ring", mesh, mat, geo, life, max: life, radius: radius, sector: !!sector });
+  }
+  function addLineEffect(a, b, color) {
+    const pts = [new THREE.Vector3(a.x, 0.9, a.z), new THREE.Vector3(b.x, 0.9, b.z)];
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 1 });
+    const line = new THREE.Line(geo, mat);
+    scene.add(line);
+    effects.push({ kind: "line", mesh: line, mat, geo, life: 0.18, max: 0.18 });
+  }
+  function updateEffects(dt) {
+    for (let i = effects.length - 1; i >= 0; i--) {
+      const e = effects[i];
+      e.life -= dt;
+      const t = 1 - Math.max(0, e.life) / e.max;
+      if (e.kind === "ring") {
+        const s = lerp(0.2, e.radius, Math.min(1, t * 1.4));
+        e.mesh.scale.set(s, 1, s);
+        e.mat.opacity = Math.max(0, 0.8 * (1 - t));
+      } else {
+        e.mat.opacity = Math.max(0, 1 - t);
+      }
+      if (e.life <= 0) {
+        scene.remove(e.mesh);
+        e.geo.dispose();
+        e.mat.dispose();
+        effects.splice(i, 1);
+      }
+    }
+  }
+
+  /* Particule */
+  const MAX_P = 500;
+  const pPos = new Float32Array(MAX_P * 3);
+  const pCol = new Float32Array(MAX_P * 3);
+  const pVel = new Float32Array(MAX_P * 3);
+  const pLife = new Float32Array(MAX_P);
+  let pNext = 0;
+  const pGeo = new THREE.BufferGeometry();
+  pGeo.setAttribute("position", new THREE.BufferAttribute(pPos, 3));
+  pGeo.setAttribute("color", new THREE.BufferAttribute(pCol, 3));
+  const pPoints = new THREE.Points(pGeo, new THREE.PointsMaterial({ size: 0.16, vertexColors: true, transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending }));
+  scene.add(pPoints);
+  for (let i = 0; i < MAX_P; i++) pPos[i * 3 + 1] = -999;
+  const tmpColor = new THREE.Color();
+  function burst(x, y, z, hex, n = 8) {
+    tmpColor.setHex(hex);
+    for (let k = 0; k < n; k++) {
+      const i = pNext; pNext = (pNext + 1) % MAX_P;
+      pPos[i * 3] = x; pPos[i * 3 + 1] = y; pPos[i * 3 + 2] = z;
+      const a = Math.random() * Math.PI * 2, sp = rnd(1.5, 4.5);
+      pVel[i * 3] = Math.cos(a) * sp; pVel[i * 3 + 1] = rnd(1.5, 4); pVel[i * 3 + 2] = Math.sin(a) * sp;
+      pCol[i * 3] = tmpColor.r; pCol[i * 3 + 1] = tmpColor.g; pCol[i * 3 + 2] = tmpColor.b;
+      pLife[i] = rnd(0.35, 0.7);
+    }
+  }
+  function updateParticles(dt) {
+    for (let i = 0; i < MAX_P; i++) {
+      if (pLife[i] <= 0) continue;
+      pLife[i] -= dt;
+      if (pLife[i] <= 0) { pPos[i * 3 + 1] = -999; continue; }
+      pVel[i * 3 + 1] -= 9 * dt;
+      pPos[i * 3] += pVel[i * 3] * dt;
+      pPos[i * 3 + 1] += pVel[i * 3 + 1] * dt;
+      pPos[i * 3 + 2] += pVel[i * 3 + 2] * dt;
+      if (pPos[i * 3 + 1] < 0.05) { pPos[i * 3 + 1] = 0.05; pVel[i * 3 + 1] *= -0.3; }
+    }
+    pGeo.attributes.position.needsUpdate = true;
+    pGeo.attributes.color.needsUpdate = true;
+  }
+
+  /* Proiectile */
+  const projGeo = new THREE.SphereGeometry(0.17, 8, 6);
+  const enemyProjGeo = new THREE.SphereGeometry(0.2, 8, 6);
+  const groundGeo = new THREE.OctahedronGeometry(0.22, 0);
+  const portalGeo = new THREE.TorusGeometry(1.1, 0.12, 12, 40);
+
+  /* ============================================================
+     Runtime
+     ============================================================ */
+  const rt = {
+    px: 0, pz: 0, face: { x: 0, z: 1 }, life: 1, mana: 1, time: 0,
+    S: null, maxLife: 1, maxMana: 1, speed: 4.2, atkMul: 1,
+    cd: {}, basicCd: 0, buffUntil: 0, potCd: 0,
+    monsters: [], playerProj: [], enemyProj: [], ground: [], texts: [],
+    pending: [], portal: null, bossRoom: null, spawnRoom: null,
+    kills: 0, paused: true, dead: false, started: false, regenT: 0,
+    spawnTime: 0, hurtFlash: 0, mapLevel: 1, mapName: "", camLook: new THREE.Vector3()
+  };
+  const input = { mx: 0, mz: 0, keys: {} };
+
+  function gatherStats() {
+    const S = { life: 0, mana: 0, armor: 0, dmg: 0, crit: 5, speed: 0, atkSpeed: 0, resFire: 0, resCold: 0, resLight: 0, regen: 0, xpMul: 0, lifePct: 0 };
+    const add = (src) => { for (const k in src) S[k] = (S[k] || 0) + src[k]; };
+    const c = CLASSES[state.cls];
+    add(c.base);
+    add(RACE_PLAYER[state.race].bonus);
+    for (const id of state.alloc) add(TREE[id].stats);
+    for (const s of SLOTS) if (state.equip[s]) for (const a of state.equip[s].affixes) S[a.k] = (S[a.k] || 0) + a.v;
+    return S;
+  }
+
+  function recalc() {
+    const S = gatherStats();
+    rt.S = S;
+    rt.maxLife = Math.max(1, Math.round((S.life + state.level * 9) * (1 + S.lifePct / 100)));
+    rt.maxMana = Math.max(1, Math.round(S.mana + state.level * 3));
+    rt.speed = 4.2 * (1 + clamp(S.speed, -60, 200) / 100);
+    rt.atkMul = 1 + clamp(S.atkSpeed, -40, 200) / 100;
+    rt.life = clamp(rt.life, 0, rt.maxLife);
+    rt.mana = clamp(rt.mana, 0, rt.maxMana);
+  }
+
+  function xpNeeded(level) { return Math.floor(45 * Math.pow(level, 1.6)); }
+  function pointsAvailable() { return Math.max(0, state.level - 1 - (state.alloc.length - 1)); }
+
+  function msg(text, ms = 1700) {
+    const el = $("msg");
+    el.textContent = text;
+    el.classList.add("show");
+    clearTimeout(msg._t);
+    msg._t = setTimeout(() => el.classList.remove("show"), ms);
+  }
+
+  function gainXp(amount) {
+    const mul = 1 + (rt.S.xpMul || 0) / 100;
+    state.xp += amount * mul;
+    let leveled = false;
+    while (state.xp >= xpNeeded(state.level) && state.level < 60) {
+      state.xp -= xpNeeded(state.level);
+      state.level++;
+      leveled = true;
+    }
+    if (leveled) {
+      const oldMax = rt.maxLife;
+      recalc();
+      rt.life = Math.min(rt.maxLife, rt.life + (rt.maxLife - oldMax));
+      msg(`Nivelul ${state.level}! Ai un punct de pasiv.`);
+      save();
+    }
+  }
+
+  function addText(x, y, z, text, color, scale = 1) {
+    rt.texts.push({ x, y, z, text, color, life: 0.85, max: 0.85, scale });
+  }
+
+  /* Spawn */
+  function spawnMonster(key, x, z, boss = false) {
+    const R = RACES_MON[key];
+    const lvl = rt.mapLevel;
+    const hpMax = Math.round(R.hp * (1 + 0.12 * (lvl - 1)) * (boss ? 8 : 1));
+    const { grp, geo, mat } = makeMonsterMesh(R, boss);
+    grp.position.set(x, 0, z);
+    scene.add(grp);
+    const m = {
+      key, R, boss, x, z, hp: hpMax, maxHp: hpMax,
+      dmg: R.dmg * (1 + 0.08 * (lvl - 1)) * (boss ? 1.6 : 1),
+      speed: R.speed * (boss ? 0.85 : 1),
+      r: 0.45 * R.scale * (boss ? 1.8 : 1),
+      alive: true, aggro: boss, cd: rnd(0, 0.8), slowT: 0, stunT: 0,
+      pounceT: 0, pounceDur: 0, pdx: 0, pdz: 0, slamT: 3.5,
+      reviveTimer: 0, revived: false, hurtT: 0, mesh: grp, geo, mat
+    };
+    rt.monsters.push(m);
+    return m;
+  }
+
+  function populateMap() {
+    rt.monsters.forEach((m) => { scene.remove(m.mesh); m.geo.dispose(); });
+    rt.monsters = [];
+    const theme = THEMES[state.mapIndex % THEMES.length];
+    rooms.forEach((room, idx) => {
+      if (idx === 0) return;
+      const isBossRoom = idx === rooms.length - 1;
+      const cx = room.x + room.w / 2, cz = room.y + room.h / 2;
+      if (isBossRoom) {
+        spawnMonster(theme.boss, cx, cz, true);
+        const extra = 2 + Math.floor(rt.mapLevel / 3);
+        for (let k = 0; k < extra; k++) spawnMonster(pick(theme.pool), cx + rnd(-2, 2), cz + rnd(-2, 2));
+        return;
+      }
+      const n = rint(1, 2 + Math.floor(rt.mapLevel / 3));
+      for (let k = 0; k < n; k++) {
+        const x = rnd(room.x + 0.8, room.x + room.w - 0.8), z = rnd(room.y + 0.8, room.y + room.h - 0.8);
+        spawnMonster(pick(theme.pool), x, z);
+      }
+    });
+  }
+
+  function clearDynamic() {
+    rt.playerProj.forEach((p) => scene.remove(p.mesh));
+    rt.enemyProj.forEach((p) => scene.remove(p.mesh));
+    rt.ground.forEach((g) => scene.remove(g.mesh));
+    rt.playerProj = []; rt.enemyProj = []; rt.ground = []; rt.texts = []; rt.pending = [];
+    if (rt.portal) { scene.remove(rt.portal); rt.portal = null; }
+  }
+
+  function startMap(fresh = false) {
+    rt.mapLevel = state.mapIndex + 1;
+    const theme = THEMES[state.mapIndex % THEMES.length];
+    rt.mapName = theme.name;
+    generateGrid();
+    buildMapMeshes(theme);
+    clearDynamic();
+    const spawn = rooms[0];
+    rt.px = spawn.x + spawn.w / 2;
+    rt.pz = spawn.y + spawn.h / 2;
+    rt.spawnRoom = spawn;
+    rt.bossRoom = rooms[rooms.length - 1];
+    rt.face = { x: 0, z: 1 };
+    populateMap();
+    rt.kills = 0;
+    rt.cd = {};
+    rt.basicCd = 0;
+    rt.buffUntil = 0;
+    if (fresh) { rt.life = rt.maxLife; rt.mana = rt.maxMana; }
+    $("mapName").textContent = `Harta ${rt.mapLevel}: ${theme.name}`;
+    msg(`${theme.name} — nivel ${rt.mapLevel}`, 2200);
+    updateCamera(true);
+    save();
+  }
+
+  function nextMap() {
+    state.mapIndex++;
+    state.potions = Math.min(8, state.potions + 1);
+    msg("Ai intrat în portalul următor.");
+    startMap(true);
+  }
+
+  /* Combat */
+  function hurtPlayer(raw, elem) {
+    const S = rt.S;
+    let d = raw;
+    if (elem === "phys") {
+      const red = S.armor / (S.armor + 120 + 4 * rt.mapLevel);
+      d *= 1 - clamp(red, 0, 0.7);
+    } else {
+      const res = elem === "fire" ? S.resFire : elem === "cold" ? S.resCold : S.resLight;
+      d *= 1 - clamp(res, -100, 75) / 100;
+    }
+    d = Math.max(1, Math.round(d));
+    rt.life -= d;
+    rt.hurtFlash = 0.25;
+    addText(rt.px, 1.8, rt.pz, "-" + d, "#ff6b6b");
+    burst(rt.px, 1, rt.pz, 0xff3030, 8);
+    if (rt.life <= 0) {
+      rt.life = 0;
+      playerDied();
+    }
+  }
+
+  function playerDied() {
+    if (rt.dead) return;
+    rt.dead = true;
+    $("deadScreen").hidden = false;
+    save();
+  }
+
+  function rollHit(baseDmg) {
+    const S = rt.S;
+    let d = baseDmg * (1 + S.dmg / 100);
+    if (rt.time < rt.buffUntil) d *= 1.35;
+    const crit = Math.random() * 100 < S.crit;
+    if (crit) d *= 1.5;
+    return { d, crit };
+  }
+
+  function damageMonster(m, base, elem, crit, slow = 0, stun = 0) {
+    if (!m.alive) return;
+    let d = base;
+    if (m.R.resist && m.R.resist[elem]) d *= 1 - m.R.resist[elem];
+    d = Math.max(1, Math.round(d));
+    m.hp -= d;
+    m.hurtT = 2.5;
+    if (slow) m.slowT = Math.max(m.slowT, slow);
+    if (stun) m.stunT = Math.max(m.stunT, stun);
+    addText(m.x, 1.6 * m.mesh.scale.y, m.z, String(d), crit ? "#ffd34d" : "#f4f1ea", crit ? 1.35 : 1);
+    burst(m.x, 0.7, m.z, elemColor[elem] || 0xffffff, 6);
+    if (m.hp <= 0) killMonster(m);
+  }
+
+  function killMonster(m) {
+    if (!m.alive) return;
+    m.alive = false;
+    m.hp = 0;
+    rt.kills++;
+    burst(m.x, 0.8, m.z, m.R.color, 16);
+    if (m.R.explode) {
+      addRingEffect(m.x, m.z, m.R.explode.radius, 0xffb020, 0.4);
+      const d = Math.hypot(rt.px - m.x, rt.pz - m.z);
+      if (d < m.R.explode.radius) hurtPlayer(m.R.explode.dmg * (1 + 0.08 * (rt.mapLevel - 1)), "fire");
+    }
+    if (m.R.revive && !m.revived) {
+      m.reviveTimer = 3.0;
+      m.mesh.visible = false;
+    } else {
+      scene.remove(m.mesh);
+      m.geo.dispose();
+    }
+    gainXp(m.R.xp * (m.boss ? 6 : 1) * (1 + 0.05 * (rt.mapLevel - 1)));
+    if (m.boss || Math.random() < 0.32) {
+      const ilvl = rt.mapLevel + (m.boss ? 2 : 0);
+      const rarity = m.boss ? (Math.random() < 0.5 ? "rare" : "magic") : undefined;
+      dropItem(m.x, m.z, makeItem(ilvl, rarity));
+    }
+    if (m.boss) msg(`${THEMES[state.mapIndex % THEMES.length].bossName} a căzut!`, 2400);
+  }
+
+  function dropItem(x, z, item) {
+    const color = new THREE.Color(rarityColor(item.rarity));
+    const mesh = new THREE.Mesh(groundGeo, new THREE.MeshBasicMaterial({ color }));
+    mesh.position.set(x, 0.5, z);
+    scene.add(mesh);
+    rt.ground.push({ x, z, item, mesh, t: Math.random() * 6 });
+  }
+
+  function aimAt(range) {
+    const m = nearestMonster(rt.px, rt.pz, range);
+    if (m) {
+      const dx = m.x - rt.px, dz = m.z - rt.pz, L = Math.hypot(dx, dz) || 1;
+      rt.face = { x: dx / L, z: dz / L };
+    }
+    return rt.face;
+  }
+  function nearestMonster(x, z, maxR) {
+    let best = null, bd = maxR * maxR;
+    for (const m of rt.monsters) {
+      if (!m.alive) continue;
+      const d2 = (m.x - x) ** 2 + (m.z - z) ** 2;
+      if (d2 < bd) { bd = d2; best = m; }
+    }
+    return best;
+  }
+
+  function spawnPlayerProj(sk, dx, dz, dmgRaw, elem) {
+    const r = rollHit(dmgRaw);
+    const mesh = new THREE.Mesh(projGeo, basicMat(sk.color));
+    mesh.position.set(rt.px + dx * 0.6, 1.0, rt.pz + dz * 0.6);
+    mesh.scale.setScalar(sk.aoe ? 1.2 : 1);
+    scene.add(mesh);
+    rt.playerProj.push({ x: rt.px + dx * 0.6, z: rt.pz + dz * 0.6, dx, dz, speed: sk.speed || 14, life: 1.4, dmg: r.d, crit: r.crit, elem, aoe: sk.aoe || 0, mesh, slow: sk.slow || 0, stun: sk.stun || 0 });
+  }
+
+  function castAbility(sk, isBasic = false) {
+    switch (sk.kind) {
+      case "proj": {
+        const a = aimAt(sk.range);
+        spawnPlayerProj(sk, a.x, a.z, sk.dmg, sk.elem);
+        break;
+      }
+      case "fan": {
+        const a = aimAt(sk.range);
+        const base = Math.atan2(a.x, a.z);
+        for (let i = 0; i < sk.count; i++) {
+          const ang = base + (i - (sk.count - 1) / 2) * sk.spread;
+          spawnPlayerProj(sk, Math.sin(ang), Math.cos(ang), sk.dmg, sk.elem);
+        }
+        break;
+      }
+      case "chain": {
+        let cur = nearestMonster(rt.px, rt.pz, sk.range);
+        if (!cur) { msg("Niciun monstru în raza de acțiune", 900); return false; }
+        const hit = new Set();
+        let from = { x: rt.px, z: rt.pz };
+        for (let j = 0; j < sk.jumps && cur; j++) {
+          hit.add(cur);
+          const r = rollHit(sk.dmg);
+          addLineEffect(from, cur, elemColor.lightning);
+          damageMonster(cur, r.d, sk.elem, r.crit);
+          from = { x: cur.x, z: cur.z };
+          let next = null, bd = sk.jumpRange * sk.jumpRange;
+          for (const m of rt.monsters) {
+            if (!m.alive || hit.has(m)) continue;
+            const d2 = (m.x - cur.x) ** 2 + (m.z - cur.z) ** 2;
+            if (d2 < bd) { bd = d2; next = m; }
+          }
+          cur = next;
+        }
+        break;
+      }
+      case "melee": {
+        const face = rt.face;
+        addRingEffect(rt.px, rt.pz, sk.range, sk.color, 0.22, { start: -Math.atan2(face.z, face.x) - sk.arc / 2, len: sk.arc });
+        const hits = [];
+        for (const m of rt.monsters) {
+          if (!m.alive) continue;
+          const dx = m.x - rt.px, dz = m.z - rt.pz;
+          const d = Math.hypot(dx, dz);
+          if (d > sk.range + m.r) continue;
+          const ang = Math.atan2(dz, dx);
+          const fa = Math.atan2(face.z, face.x);
+          let diff = Math.abs(((ang - fa + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+          if (diff <= sk.arc / 2 + 0.2) hits.push(m);
+        }
+        for (const m of hits) {
+          const r = rollHit(sk.dmg);
+          damageMonster(m, r.d, sk.elem, r.crit);
+        }
+        break;
+      }
+      case "nova": {
+        let cx = rt.px, cz = rt.pz;
+        if (sk.atTarget) {
+          const t = nearestMonster(rt.px, rt.pz, 9) || null;
+          if (t) { cx = t.x; cz = t.z; }
+          else { cx = rt.px + rt.face.x * 3; cz = rt.pz + rt.face.z * 3; }
+        }
+        const fire = () => {
+          addRingEffect(cx, cz, sk.radius, sk.color, 0.45);
+          burst(cx, 0.4, cz, sk.color, 14);
+          for (const m of rt.monsters) {
+            if (!m.alive) continue;
+            if (Math.hypot(m.x - cx, m.z - cz) <= sk.radius + m.r) {
+              const r = rollHit(sk.dmg);
+              damageMonster(m, r.d, sk.elem, r.crit, sk.slow || 0, sk.stun || 0);
+            }
+          }
+        };
+        if (sk.delay) rt.pending.push({ t: sk.delay, fn: fire, x: cx, z: cz, color: sk.color });
+        else fire();
+        break;
+      }
+      case "buff": {
+        rt.buffUntil = rt.time + sk.duration;
+        addRingEffect(rt.px, rt.pz, 2.4, sk.color, 0.5);
+        msg("Strigăt de luptă: +35% daună", 1200);
+        break;
+      }
+    }
+    return true;
+  }
+
+  function useSkill(slot) {
+    if (rt.dead || !rt.started) return;
+    const key = CLASSES[state.cls].skills[slot];
+    const sk = SKILLS[key];
+    if ((rt.cd[key] || 0) > 0) return;
+    if (rt.mana < sk.mana) { msg("Mană insuficientă", 900); return; }
+    if (!castAbility(sk)) return;
+    rt.mana -= sk.mana;
+    const isBuff = sk.kind === "buff";
+    rt.cd[key] = (isBuff ? sk.cd : sk.cd / rt.atkMul);
+    rt.cdMax = rt.cdMax || {};
+    rt.cdMax[key] = rt.cd[key];
+  }
+
+  function usePotion() {
+    if (rt.dead || !rt.started) return;
+    if (state.potions <= 0) { msg("Nu mai ai poțiuni", 1000); return; }
+    if (rt.life >= rt.maxLife) { msg("Viață completă", 900); return; }
+    state.potions--;
+    const heal = Math.round(rt.maxLife * 0.35);
+    rt.life = Math.min(rt.maxLife, rt.life + heal);
+    addText(rt.px, 1.9, rt.pz, "+" + heal, "#7dff9b");
+    burst(rt.px, 1, rt.pz, 0x7dff9b, 12);
+    save();
+  }
+
+  /* Inamici */
+  function fireEnemyProjectile(m, tx, tz) {
+    const dx = tx - m.x, dz = tz - m.z, L = Math.hypot(dx, dz) || 1;
+    const mesh = new THREE.Mesh(enemyProjGeo, basicMat(0xff5a5a));
+    mesh.position.set(m.x, 1.0, m.z);
+    scene.add(mesh);
+    rt.enemyProj.push({ x: m.x, z: m.z, dx: dx / L, dz: dz / L, speed: 8, life: 2.5, dmg: m.dmg, mesh });
+  }
+
+  function updateMonster(m, dt) {
+    if (m.reviveTimer > 0) {
+      m.reviveTimer -= dt;
+      if (m.reviveTimer <= 0) {
+        m.alive = true;
+        m.hp = Math.round(m.maxHp * 0.4);
+        m.revived = true;
+        m.aggro = true;
+        m.mesh.visible = true;
+        burst(m.x, 0.8, m.z, 0x9a9aff, 14);
+      }
+      return;
+    }
+    if (!m.alive) return;
+    const R = m.R;
+    m.cd -= dt; m.slowT -= dt; m.stunT -= dt; m.pounceT -= dt; m.hurtT -= dt;
+    m.mesh.position.set(m.x, 0, m.z);
+    const dx = rt.px - m.x, dz = rt.pz - m.z;
+    const d = Math.hypot(dx, dz) || 0.001;
+    m.mesh.rotation.y = Math.atan2(dx, dz);
+    if (!m.aggro && d < R.aggro) m.aggro = true;
+    if (!m.aggro || m.stunT > 0) return;
+
+    if (m.boss) {
+      m.slamT -= dt;
+      if (m.slamT <= 0 && d < 4.5) {
+        m.slamT = 4.2;
+        addRingEffect(m.x, m.z, 3, 0xffaa33, 0.5);
+        burst(m.x, 0.3, m.z, 0xffaa33, 18);
+        if (d < 3.2) hurtPlayer(m.dmg * 1.3, "phys");
+      }
+    }
+    if (m.pounceDur > 0) {
+      m.pounceDur -= dt;
+      moveEntity(m, m.pdx * dt, m.pdz * dt, m.r);
+      if (d < 1.4 && m.cd <= 0) { hurtPlayer(m.dmg * 1.2, "phys"); m.cd = R.cd; m.pounceDur = 0; }
+      return;
+    }
+    if (R.pounce && m.pounceT <= 0 && d > 2.5 && d < 6) {
+      m.pounceT = 3.5;
+      m.pounceDur = 0.35;
+      m.pdx = (dx / d) * 9; m.pdz = (dz / d) * 9;
+      return;
+    }
+    const spd = m.speed * (m.slowT > 0 ? 0.5 : 1);
+    if (R.ranged && d < R.range && d > 2.5) {
+      if (m.cd <= 0) { m.cd = R.cd; fireEnemyProjectile(m, rt.px, rt.pz); }
+    } else if (d > 1.3) {
+      moveEntity(m, (dx / d) * spd * dt, (dz / d) * spd * dt, m.r * 0.9);
+    } else if (m.cd <= 0) {
+      m.cd = R.cd;
+      hurtPlayer(m.dmg, "phys");
+      burst(rt.px, 0.9, rt.pz, 0xff8080, 4);
+    }
+  }
+
+  function updateEnemyProj(dt) {
+    for (let i = rt.enemyProj.length - 1; i >= 0; i--) {
+      const p = rt.enemyProj[i];
+      p.life -= dt;
+      p.x += p.dx * p.speed * dt;
+      p.z += p.dz * p.speed * dt;
+      p.mesh.position.set(p.x, 1.0, p.z);
+      let remove = p.life <= 0 || !isFloor(p.x, p.z);
+      if (!remove && Math.hypot(p.x - rt.px, p.z - rt.pz) < 0.5) {
+        hurtPlayer(p.dmg, "fire");
+        remove = true;
+      }
+      if (remove) { scene.remove(p.mesh); rt.enemyProj.splice(i, 1); }
+    }
+  }
+
+  function updatePlayerProj(dt) {
+    for (let i = rt.playerProj.length - 1; i >= 0; i--) {
+      const p = rt.playerProj[i];
+      p.life -= dt;
+      p.x += p.dx * p.speed * dt;
+      p.z += p.dz * p.speed * dt;
+      p.mesh.position.set(p.x, 1.0, p.z);
+      let remove = p.life <= 0;
+      if (!isFloor(p.x, p.z)) {
+        remove = true;
+        burst(p.x, 0.8, p.z, elemColor[p.elem] || 0xffffff, 5);
+      }
+      if (!remove) {
+        for (const m of rt.monsters) {
+          if (!m.alive) continue;
+          if (Math.hypot(m.x - p.x, m.z - p.z) < m.r + 0.2) {
+            if (p.aoe) {
+              addRingEffect(p.x, p.z, p.aoe, elemColor[p.elem] || 0xffffff, 0.35);
+              for (const o of rt.monsters) {
+                if (!o.alive) continue;
+                if (Math.hypot(o.x - p.x, o.z - p.z) <= p.aoe + o.r) damageMonster(o, p.dmg, p.elem, p.crit, p.slow, p.stun);
+              }
+            } else {
+              damageMonster(m, p.dmg, p.elem, p.crit, p.slow, p.stun);
+            }
+            remove = true;
+            break;
+          }
+        }
+      }
+      if (remove) { scene.remove(p.mesh); rt.playerProj.splice(i, 1); }
+    }
+  }
+
+  function pendingUpdate(dt) {
+    for (let i = rt.pending.length - 1; i >= 0; i--) {
+      const p = rt.pending[i];
+      p.t -= dt;
+      if (p.t <= 0) { p.fn(); rt.pending.splice(i, 1); }
+    }
+  }
+
+  /* ============================================================
+     Intrare și control
+     ============================================================ */
+  const joy = { active: false, id: -1, ox: 0, oy: 0 };
+  const joyEl = $("joy"), joyKnob = $("joyKnob");
+
+  window.addEventListener("pointerdown", (e) => {
+    if (!rt.started || uiOpen()) return;
+    if (e.target.closest && e.target.closest("button, .panel, .screen")) return;
+    if (e.clientX > window.innerWidth * 0.55) return;
+    joy.active = true;
+    joy.id = e.pointerId;
+    joy.ox = e.clientX; joy.oy = e.clientY;
+    joyEl.style.left = joy.ox + "px";
+    joyEl.style.top = joy.oy + "px";
+    joyEl.classList.add("on");
+  });
+  window.addEventListener("pointermove", (e) => {
+    if (!joy.active || e.pointerId !== joy.id) return;
+    const max = 55;
+    let dx = e.clientX - joy.ox, dy = e.clientY - joy.oy;
+    const L = Math.hypot(dx, dy);
+    if (L > max) { dx = (dx / L) * max; dy = (dy / L) * max; }
+    input.mx = dx / max;
+    input.mz = dy / max;
+    joyKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+  });
+  const endJoy = (e) => {
+    if (!joy.active || (e && e.pointerId !== joy.id)) return;
+    joy.active = false;
+    input.mx = 0; input.mz = 0;
+    joyEl.classList.remove("on");
+    joyKnob.style.transform = "";
+  };
+  window.addEventListener("pointerup", endJoy);
+  window.addEventListener("pointercancel", endJoy);
+
+  window.addEventListener("keydown", (e) => {
+    input.keys[e.key.toLowerCase()] = true;
+    if (!rt.started || uiOpen()) return;
+    if (e.key === "1") useSkill(0);
+    if (e.key === "2") useSkill(1);
+    if (e.key === "3") useSkill(2);
+    if (e.key.toLowerCase() === "q") usePotion();
+  });
+  window.addEventListener("keyup", (e) => { input.keys[e.key.toLowerCase()] = false; });
+  window.addEventListener("blur", () => { input.keys = {}; endJoy(); });
+
+  function keyboardVector() {
+    const k = input.keys;
+    let x = 0, z = 0;
+    if (k["a"] || k["arrowleft"]) x -= 1;
+    if (k["d"] || k["arrowright"]) x += 1;
+    if (k["w"] || k["arrowup"]) z -= 1;
+    if (k["s"] || k["arrowdown"]) z += 1;
+    return { x, z };
+  }
+
+  document.querySelectorAll("[data-skill]").forEach((b) => {
+    b.addEventListener("click", () => useSkill(Number(b.dataset.skill)));
+  });
+  $("potBtn").addEventListener("click", usePotion);
+
+  document.querySelectorAll("[data-open]").forEach((b) => {
+    b.addEventListener("click", () => openPanel(b.dataset.open));
+  });
+  document.querySelectorAll("[data-close]").forEach((b) => {
+    b.addEventListener("click", () => closePanels());
+  });
+
+  function uiOpen() {
+    return !$("panelTree").hidden || !$("panelInv").hidden || !$("deadScreen").hidden || !$("startScreen").hidden;
+  }
+  function openPanel(name) {
+    closePanels(true);
+    if (name === "tree") { $("panelTree").hidden = false; renderTreeInfo(); resizeTree(); }
+    if (name === "inv") { $("panelInv").hidden = false; renderInv(); }
+  }
+  function closePanels(silent) {
+    $("panelTree").hidden = true;
+    $("panelInv").hidden = true;
+    if (!silent) save();
+  }
+
+  /* Pornire */
+  function buildStartScreen() {
+    const rc = $("raceChoices"), cc = $("classChoices");
+    rc.innerHTML = Object.entries(RACE_PLAYER).map(([k, r]) =>
+      `<button class="choice" role="radio" aria-checked="${k === pendingRace}" data-race="${k}" type="button"><b>${r.name}</b><small>${r.desc}</small></button>`).join("");
+    cc.innerHTML = Object.entries(CLASSES).map(([k, c]) =>
+      `<button class="choice" role="radio" aria-checked="${k === pendingCls}" data-cls="${k}" type="button"><b>${c.name}</b><small>${c.desc}</small></button>`).join("");
+    rc.querySelectorAll("[data-race]").forEach((b) => b.addEventListener("click", () => { pendingRace = b.dataset.race; buildStartScreen(); }));
+    cc.querySelectorAll("[data-cls]").forEach((b) => b.addEventListener("click", () => { pendingCls = b.dataset.cls; buildStartScreen(); }));
+  }
+  let pendingRace = "om", pendingCls = "mage";
+
+  function beginGame(continueSave) {
+    if (!continueSave) {
+      state.race = pendingRace;
+      state.cls = pendingCls;
+      state.level = 1; state.xp = 0; state.alloc = [0]; state.inv = []; state.equip = {};
+      state.mapIndex = 0; state.potions = 3;
+    }
+    rt.started = true;
+    rt.dead = false;
+    recalc();
+    buildPlayerMesh();
+    rt.life = rt.maxLife;
+    rt.mana = rt.maxMana;
+    $("startScreen").hidden = true;
+    $("hud").hidden = false;
+    updateSkillLabels();
+    startMap(true);
+    save();
+    msg("Bine ai venit în Ruinele Umbrei", 2000);
+  }
+
+  function updateSkillLabels() {
+    CLASSES[state.cls].skills.forEach((k, i) => { $("sk" + i + "n").textContent = SKILLS[k].name; });
+  }
+
+  $("btnNew").addEventListener("click", () => beginGame(false));
+  $("btnContinue").addEventListener("click", () => beginGame(true));
+  $("btnHelp").addEventListener("click", () => { $("helpText").hidden = !$("helpText").hidden; });
+  $("btnRespawn").addEventListener("click", () => {
+    $("deadScreen").hidden = true;
+    rt.dead = false;
+    recalc();
+    startMap(true);
+  });
+
+  /* ============================================================
+     Inventar
+     ============================================================ */
+  let invSel = null;
+  function renderInv() {
+    $("equipGrid").innerHTML = SLOTS.map((s) => {
+      const it = state.equip[s];
+      return `<button class="slot" data-eq="${s}" style="--rc:${it ? rarityColor(it.rarity) : "#666"}" type="button"><small>${SLOT_NAME[s]}</small><b>${it ? it.name : "Gol"}</b></button>`;
+    }).join("");
+    let cells = "";
+    for (let i = 0; i < 24; i++) {
+      const it = state.inv[i];
+      cells += it
+        ? `<button class="cell" data-inv="${i}" style="--rc:${rarityColor(it.rarity)}" type="button">${it.name.slice(0, 12)}</button>`
+        : `<div class="cell empty"></div>`;
+    }
+    $("invGrid").innerHTML = cells;
+    $("invCount").textContent = state.inv.length;
+    const S = rt.S || gatherStats();
+    const keys = Object.keys(STAT_SHORT);
+    $("statBox").innerHTML = keys.map((k) => {
+      const v = S[k] || 0;
+      return `<div>${STAT_SHORT[k]}: <b>${Math.round(v * 10) / 10}</b></div>`;
+    }).join("") + `<div>Viață max: <b>${rt.maxLife}</b></div><div>Mană max: <b>${rt.maxMana}</b></div><div>Poțiuni: <b>${state.potions}</b></div>`;
+    showDetail();
+  }
+
+  function showDetail() {
+    const box = $("itemDetail");
+    if (!invSel) { box.innerHTML = `<span class="it-meta">Atinge un obiect pentru detalii.</span>`; return; }
+    let it = null, actions = "";
+    if (invSel.from === "inv") {
+      it = state.inv[invSel.idx];
+      if (!it) { invSel = null; return showDetail(); }
+      actions = `<button data-act="equip" type="button">Echipează</button><button class="danger" data-act="drop" type="button">Aruncă</button>`;
+    } else {
+      it = state.equip[invSel.slot];
+      if (!it) { invSel = null; return showDetail(); }
+      actions = `<button data-act="unequip" type="button">Scoate</button>`;
+    }
+    box.innerHTML = `
+      <div class="it-name" style="color:${rarityColor(it.rarity)}">${it.name}</div>
+      <div class="it-meta">${RARITY[it.rarity].label} · ${SLOT_NAME[it.slot]} · nivel obiect ${it.ilvl}</div>
+      ${itemLines(it)}
+      <div class="acts">${actions}</div>`;
+  }
+
+  $("panelInv").addEventListener("click", (e) => {
+    const cell = e.target.closest("[data-inv]");
+    const slot = e.target.closest("[data-eq]");
+    const act = e.target.closest("[data-act]");
+    if (cell) { invSel = { from: "inv", idx: Number(cell.dataset.inv) }; showDetail(); return; }
+    if (slot) { invSel = { from: "eq", slot: slot.dataset.eq }; showDetail(); return; }
+    if (act && invSel) {
+      if (act.dataset.act === "equip" && invSel.from === "inv") {
+        const it = state.inv[invSel.idx];
+        const old = state.equip[it.slot];
+        state.inv.splice(invSel.idx, 1);
+        state.equip[it.slot] = it;
+        if (old) state.inv.push(old);
+        msg(`Echipat: ${it.name}`, 1100);
+      } else if (act.dataset.act === "unequip" && invSel.from === "eq") {
+        if (state.inv.length >= 24) { msg("Rucsacul este plin", 1200); return; }
+        const it = state.equip[invSel.slot];
+        delete state.equip[invSel.slot];
+        state.inv.push(it);
+      } else if (act.dataset.act === "drop" && invSel.from === "inv") {
+        state.inv.splice(invSel.idx, 1);
+      }
+      invSel = null;
+      recalc();
+      save();
+      renderInv();
+    }
+  });
+
+  /* ============================================================
+     Arbore de pasive
+     ============================================================ */
+  const treeCanvas = $("treeCanvas");
+  const tctx = treeCanvas.getContext("2d");
+  const view = { x: 0, y: 0, s: 0.85 };
+  let treeW = 0, treeH = 0, treeDpr = 1;
+  let selectedNode = null;
+  const treePointers = new Map();
+  let gesture = null;
+
+  function resizeTree() {
+    treeDpr = Math.min(window.devicePixelRatio || 1, 2);
+    const r = treeCanvas.getBoundingClientRect();
+    treeW = r.width; treeH = r.height;
+    treeCanvas.width = Math.round(treeW * treeDpr);
+    treeCanvas.height = Math.round(treeH * treeDpr);
+    if (!view.init) { view.x = treeW / 2; view.y = treeH / 2; view.init = true; }
+    drawTree();
+  }
+  window.addEventListener("resize", () => { sizeFx(); renderer.setSize(window.innerWidth, window.innerHeight); camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); if (!$("panelTree").hidden) resizeTree(); });
+
+  function nodeScreen(n) { return { x: view.x + n.x * view.s, y: view.y + n.y * view.s }; }
+
+  function isAllocatable(n) {
+    if (state.alloc.includes(n.id)) return false;
+    return n.links.some((l) => state.alloc.includes(l));
+  }
+  function canRemove(id) {
+    const set = new Set(state.alloc);
+    set.delete(id);
+    const seen = new Set([0]);
+    const stack = [0];
+    while (stack.length) {
+      const cur = stack.pop();
+      for (const l of TREE[cur].links) if (set.has(l) && !seen.has(l)) { seen.add(l); stack.push(l); }
+    }
+    return seen.size === set.size;
+  }
+
+  function drawTree() {
+    if (!treeW) return;
+    const c = tctx;
+    c.setTransform(treeDpr, 0, 0, treeDpr, 0, 0);
+    c.clearRect(0, 0, treeW, treeH);
+    const allocSet = new Set(state.alloc);
+    c.lineWidth = 2;
+    for (const n of TREE) {
+      const a = nodeScreen(n);
+      for (const l of n.links) {
+        if (l < n.id) continue;
+        const b = nodeScreen(TREE[l]);
+        const on = allocSet.has(n.id) && allocSet.has(l);
+        c.strokeStyle = on ? "rgba(217,178,111,0.95)" : "rgba(160,150,140,0.22)";
+        c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.stroke();
+      }
+    }
+    for (const n of TREE) {
+      const p = nodeScreen(n);
+      if (p.x < -30 || p.y < -30 || p.x > treeW + 30 || p.y > treeH + 30) continue;
+      const rad = (n.type === "keystone" ? 11 : n.type === "notable" ? 8 : n.type === "root" ? 12 : 5.5) * Math.max(0.6, view.s);
+      const on = allocSet.has(n.id);
+      const avail = !on && isAllocatable(n);
+      c.beginPath();
+      c.arc(p.x, p.y, rad, 0, Math.PI * 2);
+      c.fillStyle = on ? "#d9b26f" : n.type === "keystone" ? "#3b2a52" : n.type === "notable" ? "#2a2236" : "#18141e";
+      c.fill();
+      c.lineWidth = avail ? 2.5 : 1.2;
+      c.strokeStyle = avail ? "#fff3c4" : on ? "#fff3c4" : "rgba(200,190,170,0.35)";
+      c.stroke();
+      if (selectedNode === n.id) {
+        c.beginPath(); c.arc(p.x, p.y, rad + 5, 0, Math.PI * 2);
+        c.strokeStyle = "#7af0ff"; c.lineWidth = 1.5; c.stroke();
+      }
+    }
+    const root = nodeScreen(TREE[0]);
+    c.fillStyle = "rgba(236,229,211,0.7)";
+    c.font = "600 12px Cinzel, serif";
+    c.textAlign = "center";
+    c.fillText("Rădăcina", root.x, root.y - 18);
+    $("ptsTxt").textContent = `Puncte: ${pointsAvailable()}`;
+  }
+
+  function renderTreeInfo() {
+    const box = $("treeInfo");
+    if (selectedNode === null) {
+      box.innerHTML = `<b>Arbore de pasive</b><div class="hint">Atinge un nod pentru detalii. Trage pentru a te mișca, ciupește pentru zoom. Un nod se poate alege doar lângă unul deja ales.</div>`;
+      return;
+    }
+    const n = TREE[selectedNode];
+    const on = state.alloc.includes(n.id);
+    const avail = isAllocatable(n);
+    const statsTxt = Object.entries(n.stats).map(([k, v]) => statLine(k, v)).join(" · ") || "Nod de start";
+    const kind = { keystone: "Cheie", notable: "Notabil", small: "Mic", root: "Start" }[n.type];
+    let act = "";
+    if (on && n.id !== 0) act = canRemove(n.id) ? "Atinge din nou pentru a elimina" : "Nu poate fi eliminat: alte noduri depind de el";
+    else if (!on && avail) act = pointsAvailable() > 0 ? "Atinge din nou pentru a alege" : "Nu ai puncte disponibile";
+    else if (!on) act = "Alege un nod vecin mai întâi";
+    box.innerHTML = `<b>${n.name}</b> <span class="hint">· ${kind} · inel ${n.ring}</span><div>${statsTxt}</div><div class="hint">${on ? "Ales" : avail ? "Disponibil" : "Blocat"}${act ? " · " + act : ""}</div>`;
+  }
+
+  function hitNode(px, py) {
+    let best = null, bd = 22 * 22;
+    for (const n of TREE) {
+      const p = nodeScreen(n);
+      const d2 = (p.x - px) ** 2 + (p.y - py) ** 2;
+      if (d2 < bd) { bd = d2; best = n.id; }
+    }
+    return best;
+  }
+
+  function treeClick(px, py) {
+    const id = hitNode(px, py);
+    if (id === null) { selectedNode = null; renderTreeInfo(); drawTree(); return; }
+    const n = TREE[id];
+    const was = selectedNode;
+    selectedNode = id;
+    const on = state.alloc.includes(id);
+    if (was === id) {
+      if (!on && isAllocatable(n) && pointsAvailable() > 0) {
+        state.alloc.push(id);
+        msg(`Pasiv ales: ${n.name}`, 1000);
+      } else if (on && id !== 0 && canRemove(id)) {
+        state.alloc = state.alloc.filter((x) => x !== id);
+        msg(`Pasiv eliminat: ${n.name}`, 1000);
+      }
+      recalc();
+      save();
+    }
+    renderTreeInfo();
+    drawTree();
+  }
+
+  treeCanvas.addEventListener("pointerdown", (e) => {
+    treeCanvas.setPointerCapture(e.pointerId);
+    treePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (treePointers.size === 1) gesture = { type: "pan", x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now(), moved: 0 };
+    if (treePointers.size === 2) {
+      const [a, b] = [...treePointers.values()];
+      gesture = { type: "pinch", d: Math.hypot(a.x - b.x, a.y - b.y), s: view.s };
+    }
+  });
+  treeCanvas.addEventListener("pointermove", (e) => {
+    if (!treePointers.has(e.pointerId)) return;
+    treePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (gesture && gesture.type === "pan" && treePointers.size === 1) {
+      const dx = e.clientX - gesture.x, dy = e.clientY - gesture.y;
+      view.x += dx; view.y += dy;
+      gesture.x = e.clientX; gesture.y = e.clientY;
+      gesture.moved += Math.abs(dx) + Math.abs(dy);
+      drawTree();
+    } else if (gesture && gesture.type === "pinch" && treePointers.size >= 2) {
+      const [a, b] = [...treePointers.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+      const ns = clamp(gesture.s * (d / gesture.d), 0.35, 2.6);
+      view.s = ns;
+      drawTree();
+    }
+  });
+  const treeUp = (e) => {
+    const was = treePointers.get(e.pointerId);
+    treePointers.delete(e.pointerId);
+    if (gesture && gesture.type === "pan" && treePointers.size === 0) {
+      const quick = performance.now() - gesture.t < 500;
+      if (gesture.moved < 8 && quick && was) {
+        const rect = treeCanvas.getBoundingClientRect();
+        treeClick(e.clientX - rect.left, e.clientY - rect.top);
+      }
+      gesture = null;
+    }
+    if (treePointers.size === 0) gesture = null;
+  };
+  treeCanvas.addEventListener("pointerup", treeUp);
+  treeCanvas.addEventListener("pointercancel", treeUp);
+  treeCanvas.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    view.s = clamp(view.s * (e.deltaY < 0 ? 1.1 : 0.9), 0.35, 2.6);
+    drawTree();
+  }, { passive: false });
+
+  /* ============================================================
+     Cameră, HUD, text și bare de viață
+     ============================================================ */
+  const camTarget = new THREE.Vector3();
+  function updateCamera(snap) {
+    camTarget.set(rt.px, 0, rt.pz);
+    const offset = new THREE.Vector3(0, 13, 9.5);
+    const desired = camTarget.clone().add(offset);
+    if (snap) camera.position.copy(desired);
+    else camera.position.lerp(desired, 0.12);
+    rt.camLook.lerp(camTarget, snap ? 1 : 0.15);
+    camera.lookAt(rt.camLook);
+  }
+
+  function updateHud() {
+    $("hpFill").style.width = (100 * rt.life / rt.maxLife).toFixed(1) + "%";
+    $("hpTxt").textContent = `${Math.ceil(rt.life)} / ${rt.maxLife}`;
+    $("mpFill").style.width = (100 * rt.mana / rt.maxMana).toFixed(1) + "%";
+    $("mpTxt").textContent = `${Math.floor(rt.mana)} / ${rt.maxMana}`;
+    const need = xpNeeded(state.level);
+    $("xpFill").style.width = (100 * state.xp / need).toFixed(1) + "%";
+    $("lvlTxt").textContent = `Nivelul ${state.level} · Monstri rămași: ${rt.monsters.filter((m) => m.alive || m.reviveTimer > 0).length}`;
+    $("potCount").textContent = state.potions;
+    CLASSES[state.cls].skills.forEach((k, i) => {
+      const btn = $("sk" + i);
+      const cdv = rt.cd[k] || 0;
+      const max = (rt.cdMax && rt.cdMax[k]) || SKILLS[k].cd;
+      btn.querySelector(".cdv").style.setProperty("--cd", (cdv > 0 ? (cdv / max) * 100 : 0).toFixed(1) + "%");
+      btn.style.opacity = rt.mana < SKILLS[k].mana ? "0.55" : "1";
+    });
+  }
+
+  function drawOverlay(dt) {
+    const w = window.innerWidth, h = window.innerHeight;
+    fx.clearRect(0, 0, w, h);
+    const v = new THREE.Vector3();
+    const project = (x, y, z) => {
+      v.set(x, y, z).project(camera);
+      return { x: (v.x * 0.5 + 0.5) * w, y: (-v.y * 0.5 + 0.5) * h, z: v.z };
+    };
+    fx.textAlign = "center";
+    fx.font = "600 13px Inter, sans-serif";
+    for (const m of rt.monsters) {
+      if (!m.alive || (m.hurtT <= 0 && !m.boss)) continue;
+      const p = project(m.x, 1.6 * m.mesh.scale.y, m.z);
+      if (p.z > 1) continue;
+      const bw = m.boss ? 120 : 44;
+      fx.fillStyle = "rgba(0,0,0,0.7)";
+      fx.fillRect(p.x - bw / 2, p.y - 14, bw, 5);
+      fx.fillStyle = m.boss ? "#ffb14a" : "#d84545";
+      fx.fillRect(p.x - bw / 2, p.y - 14, bw * clamp(m.hp / m.maxHp, 0, 1), 5);
+    }
+    for (let i = rt.texts.length - 1; i >= 0; i--) {
+      const t = rt.texts[i];
+      t.life -= dt;
+      t.y += dt * 1.2;
+      if (t.life <= 0) { rt.texts.splice(i, 1); continue; }
+      const p = project(t.x, t.y, t.z);
+      fx.globalAlpha = clamp(t.life / t.max * 1.6, 0, 1);
+      fx.font = `700 ${Math.round(14 * t.scale)}px Inter, sans-serif`;
+      fx.fillStyle = "rgba(0,0,0,0.75)";
+      fx.fillText(t.text, p.x + 1, p.y + 1);
+      fx.fillStyle = t.color;
+      fx.fillText(t.text, p.x, p.y);
+    }
+    fx.globalAlpha = 1;
+  }
+
+  /* ============================================================
+     Buclă principală
+     ============================================================ */
+  let lastHudT = 0;
+  let saveT = 0;
+  let last = performance.now();
+  const clock = { t: 0 };
+
+  function tick(now) {
+    requestAnimationFrame(tick);
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    const active = rt.started && !rt.dead && !uiOpen();
+    if (active) {
+      rt.time += dt;
+      updatePlayer(dt);
+      rt.life = Math.min(rt.maxLife, rt.life + (rt.S.regen || 0) * dt);
+      rt.mana = Math.min(rt.maxMana, rt.mana + (3 + (rt.S.mana || 0) * 0.01) * dt);
+      autoAttack(dt);
+      for (const k in rt.cd) if (rt.cd[k] > 0) rt.cd[k] = Math.max(0, rt.cd[k] - dt);
+      rt.basicCd = Math.max(0, rt.basicCd - dt);
+      for (const m of rt.monsters) updateMonster(m, dt);
+      rt.monsters = rt.monsters.filter((m) => m.alive || m.reviveTimer > 0 || m.mesh.parent);
+      updatePlayerProj(dt);
+      updateEnemyProj(dt);
+      pendingUpdate(dt);
+      checkPickupsAndPortal(dt);
+      saveT += dt;
+      if (saveT > 20) { saveT = 0; save(); }
+    }
+    if (rt.started) {
+      updateEffects(dt);
+      updateParticles(dt);
+      for (const g of rt.ground) { g.t += dt; g.mesh.rotation.y += dt * 2; g.mesh.position.y = 0.5 + Math.sin(g.t * 3) * 0.08; }
+      if (rt.portal) { rt.portal.rotation.z += dt * 0.8; }
+      if (playerGroup) {
+        playerGroup.position.set(rt.px, 0, rt.pz);
+        playerGroup.rotation.y = Math.atan2(rt.face.x, rt.face.z);
+      }
+      updateCamera(false);
+      if (rt.hurtFlash > 0) rt.hurtFlash -= dt;
+      renderer.render(scene, camera);
+      drawOverlay(dt);
+      if (now - lastHudT > 80) { lastHudT = now; updateHud(); }
+      if (!$("panelTree").hidden && now % 500 < 20) drawTree();
+    }
+  }
+
+  function updatePlayer(dt) {
+    let mx = input.mx, mz = input.mz;
+    const kb = keyboardVector();
+    if (kb.x || kb.z) { mx = kb.x; mz = kb.z; }
+    const L = Math.hypot(mx, mz);
+    if (L > 0.12) {
+      const sp = rt.speed * Math.min(1, L) * dt;
+      const nx = mx / Math.max(L, 1), nz = mz / Math.max(L, 1);
+      rt.face = { x: nx, z: nz };
+      moveEntity({ get x() { return rt.px; }, set x(v) { rt.px = v; }, get z() { return rt.pz; }, set z(v) { rt.pz = v; } }, nx * sp, nz * sp, 0.3);
+    }
+  }
+
+  function autoAttack(dt) {
+    if (rt.basicCd > 0) return;
+    const b = CLASSES[state.cls].basic;
+    const target = nearestMonster(rt.px, rt.pz, b.range);
+    if (!target) return;
+    rt.basicCd = b.cd / rt.atkMul;
+    const dx = target.x - rt.px, dz = target.z - rt.pz, L = Math.hypot(dx, dz) || 1;
+    rt.face = { x: dx / L, z: dz / L };
+    castAbility(b, true);
+  }
+
+  function checkPickupsAndPortal(dt) {
+    for (let i = rt.ground.length - 1; i >= 0; i--) {
+      const g = rt.ground[i];
+      if (Math.hypot(g.x - rt.px, g.z - rt.pz) < 1.1) {
+        if (state.inv.length < 24) {
+          state.inv.push(g.item);
+          msg(`Ai găsit: ${g.item.name}`, 1100);
+          save();
+        } else {
+          msg("Rucsacul este plin", 900);
+          continue;
+        }
+        scene.remove(g.mesh);
+        rt.ground.splice(i, 1);
+      }
+    }
+    const alive = rt.monsters.filter((m) => m.alive || m.reviveTimer > 0).length;
+    if (alive === 0 && !rt.portal) {
+      const br = rt.bossRoom;
+      const portal = new THREE.Mesh(portalGeo, new THREE.MeshBasicMaterial({ color: 0x7af0ff }));
+      portal.rotation.x = Math.PI / 2;
+      portal.position.set(br.x + br.w / 2, 1.0, br.y + br.h / 2);
+      scene.add(portal);
+      rt.portal = portal;
+      msg("Portalul s-a deschis!", 2000);
+    }
+    if (rt.portal) {
+      const dx = rt.portal.position.x - rt.px, dz = rt.portal.position.z - rt.pz;
+      if (Math.hypot(dx, dz) < 1.2) nextMap();
+    }
+  }
+
+  /* ============================================================
+     Inițializare
+     ============================================================ */
+  window.addEventListener("resize", () => {});
+  window.addEventListener("visibilitychange", () => { if (document.hidden) save(); });
+
+  const hadSave = hasSave() && load();
+  $("btnContinue").hidden = !hadSave;
+  $("saveNote").textContent = hadSave
+    ? `Salvare găsită: ${RACE_PLAYER[state.race].name} ${CLASSES[state.cls].name}, nivel ${state.level}.`
+    : "Jocul se salvează automat pe acest dispozitiv.";
+  if (hadSave) { pendingRace = state.race; pendingCls = state.cls; }
+  buildStartScreen();
+  generateGrid();
+  buildMapMeshes(THEMES[0]);
+  requestAnimationFrame(tick);
+
+  window.__ruine = { rt, state, TREE, SKILLS, CLASSES, beginGame, useSkill, usePotion, openPanel, closePanels, spawnMonster, killMonster, nextMap, hurtPlayer, makeItem, dropItem, treeView: () => ({ view, treeCanvas }) };
+</script>
+</body>
+</html>

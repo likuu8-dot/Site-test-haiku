@@ -679,19 +679,38 @@
   /* ============================================================
      Sunet
      ============================================================ */
-  /* Fiecare sunet are un mic pool de elemente Audio refolosite. Varianta veche crea un element nou
-     (cloneNode) la fiecare lovitură, ceea ce dădea sacadări pe telefoane. */
-  const SFX = {};
-  const SFX_POOL = 4;
-  ["hit", "kill", "dash", "shoot", "level_up", "coin", "gem", "hurt", "boss", "revive", "downed", "impact", "big_kill", "confirm", "step"].forEach((n) => {
-    const list = [];
-    for (let k = 0; k < SFX_POOL; k++) {
-      const a = new Audio(ASSET + "sfx/" + n + ".ogg");
-      a.preload = "auto";
-      list.push(a);
+  /* Efectele sonore folosesc Web Audio: fiecare fișier se decodează o singură dată, iar redarea e doar
+     un nod nou în graficul audio. Elementele <audio> (play/seek) blocau pagina la fiecare lovitură pe
+     telefoane, adică exact în luptă. */
+  const SFX_NAMES = ["hit", "kill", "dash", "shoot", "level_up", "coin", "gem", "hurt", "boss", "revive", "downed", "impact", "big_kill", "confirm", "step"];
+  const sfxRaw = {}, sfxBuf = {};
+  let audioCtx = null, sfxOut = null, sfxVoices = 0;
+  function decodeSfx(n) {
+    if (!audioCtx || !sfxRaw[n]) return;
+    const raw = sfxRaw[n];
+    delete sfxRaw[n];
+    audioCtx.decodeAudioData(raw).then((b) => { sfxBuf[n] = b; }, () => { /* format nesuportat: sunetul lipsește */ });
+  }
+  function ensureAudio() {
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      try { audioCtx = new AC(); } catch (e) { return; }
+      sfxOut = audioCtx.createGain();
+      sfxOut.connect(audioCtx.destination);
+      for (const n of Object.keys(sfxRaw)) decodeSfx(n);
     }
-    SFX[n] = { list, i: 0 };
+    if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+  }
+  SFX_NAMES.forEach((n) => {
+    fetch(ASSET + "sfx/" + n + ".ogg")
+      .then((r) => (r.ok ? r.arrayBuffer() : null))
+      .then((b) => { if (b) { sfxRaw[n] = b; decodeSfx(n); } })
+      .catch(() => {});
   });
+  // Contextul audio pornește doar după o atingere sau o tastă (regula browserelor).
+  window.addEventListener("pointerdown", ensureAudio, { passive: true });
+  window.addEventListener("keydown", ensureAudio);
   const music = new Audio(ASSET + "music/battle_theme_a.mp3");
   music.loop = true;
   music.volume = 0.22;
@@ -702,17 +721,18 @@
     const now = performance.now();
     if (sfxLast[name] && now - sfxLast[name] < 45) return;
     sfxLast[name] = now;
-    const pool = SFX[name];
-    if (!pool) return;
-    const a = pool.list[pool.i];
-    pool.i = (pool.i + 1) % pool.list.length;
+    const buf = sfxBuf[name];
+    if (!buf || !audioCtx || audioCtx.state !== "running" || sfxVoices >= 12) return;
     try {
-      a.pause();
-      a.currentTime = 0;
-      a.volume = vol;
-      const p = a.play();
-      if (p) p.catch(() => {});
-    } catch (e) { /* audio blocat; jocul continuă fără sunet */ }
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      const g = audioCtx.createGain();
+      g.gain.value = vol;
+      src.connect(g).connect(sfxOut);
+      sfxVoices++;
+      src.onended = () => { sfxVoices--; src.disconnect(); g.disconnect(); };
+      src.start();
+    } catch (e) { /* audio indisponibil; jocul continuă fără sunet */ }
   }
   function refreshSoundBtn() {
     $("sndBtn").textContent = "Sunet: " + (soundOn ? "da" : "nu");
@@ -1148,10 +1168,8 @@
     if (rt.combo >= 2) {
       el.textContent = rt.combo + "× combo";
       el.classList.add("show");
-      el.classList.remove("pop");
-      void el.offsetWidth;
-      el.classList.add("pop");
-      setTimeout(() => el.classList.remove("pop"), 160);
+      // Animația „pop” fără reflow forțat (void el.offsetWidth recalcula layout-ul paginii la fiecare omor).
+      if (el.animate) el.animate([{ transform: "scale(1.18)" }, { transform: "scale(1)" }], { duration: 180, easing: "ease-out" });
     }
   }
   const comboBonus = () => 1 + Math.min(0.3, rt.combo * 0.02);
@@ -1277,7 +1295,12 @@
     msg(`${theme.name} — nivel ${rt.mapLevel}`, 2200);
     updateCamera(true);
     // Compilează acum shader-ele tuturor materialelor hărții, ca să nu apară sacadă la primul monstru nou.
+    // Efectele de luptă apar abia la primul atac; le punem temporar în scenă ca shader-ele lor să se
+    // compileze acum, nu în mijlocul luptei. Vezi effectWarmGroup().
+    const warm = effectWarmGroup();
+    scene.add(warm);
     renderer.compile(scene, camera);
+    scene.remove(warm);
     save();
   }
 
@@ -1359,7 +1382,8 @@
     const dx = m.x - rt.px, dz = m.z - rt.pz, L = Math.hypot(dx, dz) || 1;
     m.knockX = (dx / L) * (crit ? 0.9 : 0.4);
     m.knockZ = (dz / L) * (crit ? 0.9 : 0.4);
-    if (crit) { rt.hitStop = Math.max(rt.hitStop, 0.05); rt.shake = Math.min(0.6, rt.shake + 0.15); }
+    // Fără oprire la critice: pe telefon, înghețările dese în luptă arătau ca lag.
+    if (crit) rt.shake = Math.min(0.6, rt.shake + 0.1);
     sfx("hit", crit ? 0.6 : 0.35);
     if (m.hp <= 0) killMonster(m);
   }
@@ -1373,7 +1397,7 @@
     comboBump();
     burst(m.x, m.h * 0.5, m.z, m.R.tint ?? m.R.color ?? 0xffffff, 18);
     sfx(m.boss ? "big_kill" : "kill", m.boss ? 0.8 : 0.5);
-    rt.hitStop = Math.max(rt.hitStop, m.boss ? 0.12 : 0.03);
+    if (m.boss) rt.hitStop = Math.max(rt.hitStop, 0.12);
     if (m.boss) rt.shake = Math.min(0.8, rt.shake + 0.5);
     if (m.R.explode) {
       addRingEffect(m.x, m.z, m.R.explode.radius, 0xffb020, 0.4);
@@ -1488,14 +1512,42 @@
   }
 
   const effects = [];
+  /* Geometriile inelelor se fac o singură dată și se refolosesc. Înainte, fiecare atac crea și trimitea
+     pe GPU o geometrie nouă. Sectorul (lovitura corp la corp) e construit centrat pe unghiul 0 și rotit. */
+  const ringGeoFull = new THREE.RingGeometry(0.85, 1, 40).rotateX(-Math.PI / 2);
+  const sectorGeos = new Map();
+  function sectorGeo(len) {
+    const key = Math.round(len * 100);
+    let g = sectorGeos.get(key);
+    if (!g) { g = new THREE.RingGeometry(0.05, 1, 24, 1, -len / 2, len).rotateX(-Math.PI / 2); sectorGeos.set(key, g); }
+    return g;
+  }
+  /* Materiale permanente, câte unul pentru fiecare tip de efect. Three.js șterge un shader compilat când
+     ultimul material care îl folosește e eliberat (dispose). Fiecare inel, fulger sau obiect căzut își
+     elibera materialul la final, iar următorul atac recompila shader-ul: pe telefon, asta e o înghețare
+     vizibilă la aproape fiecare atac. Aceste materiale nu se eliberează niciodată, deci shader-ele rămân. */
+  let effectWarm = null;
+  function effectWarmGroup() {
+    if (effectWarm) return effectWarm;
+    effectWarm = new THREE.Group();
+    const lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(1, 0, 0)]);
+    effectWarm.add(
+      new THREE.Mesh(ringGeoFull, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false })),
+      new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.3, depthWrite: false })),
+      new THREE.Mesh(groundGeo, new THREE.MeshBasicMaterial({ color: 0xffffff })),
+      new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ transparent: true, opacity: 1 })),
+      new THREE.Mesh(projGeo, basicMat(0xffffff))
+    );
+    return effectWarm;
+  }
   function addRingEffect(x, z, radius, color, life = 0.35, sector = null) {
-    const geo = sector ? new THREE.RingGeometry(0.05, 1, 24, 1, sector.start, sector.len) : new THREE.RingGeometry(0.85, 1, 40);
-    geo.rotateX(-Math.PI / 2);
+    const geo = sector ? sectorGeo(sector.len) : ringGeoFull;
     const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(x, 0.05, z);
+    if (sector) mesh.rotation.y = sector.start + sector.len / 2;
     scene.add(mesh);
-    effects.push({ kind: "ring", mesh, mat, geo, life, max: life, radius, sector: !!sector });
+    effects.push({ kind: "ring", mesh, mat, geo, life, max: life, radius, sector: !!sector, sharedGeo: true });
   }
   function addLineEffect(a, b, color) {
     const pts = [new THREE.Vector3(a.x, 0.9, a.z), new THREE.Vector3(b.x, 0.9, b.z)];
@@ -1519,7 +1571,7 @@
       }
       if (e.life <= 0) {
         scene.remove(e.mesh);
-        e.geo.dispose();
+        if (!e.sharedGeo) e.geo.dispose();
         e.mat.dispose();
         effects.splice(i, 1);
       }
@@ -2325,7 +2377,9 @@
     if (snap) camera.position.copy(camDesired);
     else camera.position.lerp(camDesired, 1 - Math.exp(-dt * 7.7));
     rt.camLook.lerp(camTarget, snap ? 1 : 1 - Math.exp(-dt * 9.8));
-    shakeVec.set(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).multiplyScalar(rt.shake * 0.35);
+    // Tremur lin și mai mic: zgomotul aleator diferit la fiecare cadru făcea imaginea să „sară” ca un refresh.
+    const st = performance.now() / 1000;
+    shakeVec.set(Math.sin(st * 31.7), Math.sin(st * 27.3 + 1.3) * 0.5, Math.sin(st * 35.9 + 2.1)).multiplyScalar(rt.shake * 0.12);
     camera.position.add(shakeVec);
     camera.lookAt(rt.camLook);
   }
